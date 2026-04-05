@@ -377,7 +377,15 @@ A structured review of the entire system. Can be triggered anytime by the user s
 4. **Errors:** Review QA alerts from the past month. Any patterns? Recurring procedure violations? Check resolved.jsonl — are old fixes still holding?
 5. **Speed:** Are responses fast enough? Any tool calls timing out? Is the bot polling efficiently?
 6. **Architecture:** Does the file structure still make sense? Any dead files? Any missing pieces?
-7. **Deviations:** Did the bot consistently work around any procedures? If so, the procedure may be wrong.
+7. **Orphan check:** Look for:
+   - Features or scripts that nothing connects to (orphaned code)
+   - Empty directories or files with no content
+   - Deeply nested folders that could be flattened (3 levels deep to reach 2 files = consolidate)
+   - Services or crons still running for components that were removed
+   - Env vars that no code references anymore
+   - Memory files the bot wrote but never reads back
+   Consolidate or eliminate anything that isn't serving a purpose.
+8. **Deviations:** Did the bot consistently work around any procedures? If so, the procedure may be wrong.
 
 Output: A report sent via Telegram + committed to git. All proposed changes follow the approval rule (APPROVE/REJECT/MODIFY).
 
@@ -401,3 +409,4 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-05:** Added sync timestamps to Fitbit data (Notes column). **Why:** Without timestamps, no way to know if data is from today's weigh-in or yesterday's stale sync.
 - **2026-04-05:** Rebranded to J.A.R.V.I.S., scrubbed all personal info, squashed git history, pushed to GitHub (public). **Why:** Open source for community review. Personal info (email, IDs, keys) stays in env file only.
 - **2026-04-05:** Consolidated into single git repo with hourly auto-commit + auto-push to GitHub. **Why:** Full audit trail. Any AI can run `git log` to see every change and why it was made.
+- **2026-04-05:** Orphan cleanup. Removed: old `/home/openclaw/lifeos-bot/` directory (stale duplicate), Docker sandbox container + images (99MB, OpenClaw only), OpenClaw directories (agents, canvas, cron, devices, identity, logs, media, sandbox, tasks, telegram, credentials), stale workspace files (old SOUL.md, CHANGELOG.md, etc.). Kept: `.openclaw/workspace/homebrew/` (gog binary), `.openclaw/workspace/.config/gogcli/` (Google auth). **Why:** ~100MB of dead weight serving no purpose. **QA approach:** Snapshot all service states before cleanup → clean → verify same services still respond → send Telegram confirmation.

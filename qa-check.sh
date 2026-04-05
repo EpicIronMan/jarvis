@@ -108,7 +108,35 @@ if [ -f "$YESTERDAY_LOG" ]; then
     fi
 fi
 
-# --- Check 9: Architecture drift ---
+# --- Check 9: Orphan detection ---
+# Empty directories
+for dir in "$REPO_DIR"/*/; do
+    if [ -d "$dir" ] && [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
+        dirname=$(basename "$dir")
+        flag_issue "empty_dir_$dirname" "Orphan: Empty directory $dirname/"
+    fi
+done
+
+# Old OpenClaw service still enabled
+if systemctl is-enabled --quiet openclaw 2>/dev/null; then
+    flag_issue "orphan_openclaw_service" "Orphan: openclaw.service still enabled (replaced by lifeos-bot)"
+fi
+
+# Memory files older than 30 days with no recent reads in logs
+for f in "$REPO_DIR"/memory/*.md; do
+    [ -f "$f" ] || continue
+    fname=$(basename "$f")
+    age_days=$(( ($(date +%s) - $(stat -c %Y "$f")) / 86400 ))
+    if [ "$age_days" -gt 30 ]; then
+        # Check if any log in last 7 days references this file
+        recent_use=$(grep -rl "$fname" "$LOG_DIR"/ 2>/dev/null | tail -7 | wc -l || echo "0")
+        if [ "$recent_use" -eq 0 ]; then
+            flag_issue "stale_memory_$fname" "Orphan: memory/$fname not modified in ${age_days}d and not referenced in recent logs"
+        fi
+    fi
+done
+
+# --- Check 10: Architecture drift ---
 for f in bot.py soul.md morning-brief.sh architecture.md procedures.md qa-check.sh auto-commit.sh; do
     if [ ! -f "$REPO_DIR/$f" ]; then
         flag_issue "missing_file_$f" "Architecture: Missing expected file $f"
