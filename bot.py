@@ -397,26 +397,18 @@ def tool_upload_to_drive(data: dict) -> str:
 
 
 def tool_sync_fitbit(data: dict) -> str:
-    """Trigger an immediate Fitbit data sync."""
+    """Trigger an immediate Fitbit data sync by running the script directly."""
     try:
         result = subprocess.run(
-            ["systemctl", "start", "fitbit-sync.service"],
+            ["python3", "/home/openclaw/fitbit_sync.py"],
             capture_output=True, text=True, timeout=60,
+            env={**os.environ, "HOME": "/home/openclaw"},
         )
         if result.returncode != 0:
-            return f"ERROR: {result.stderr.strip()}"
-        # Wait briefly for sync to complete, then verify
-        import time
-        time.sleep(5)
-        check = subprocess.run(
-            ["systemctl", "is-active", "fitbit-sync.service"],
-            capture_output=True, text=True,
-        )
-        if check.stdout.strip() == "active":
-            return "Fitbit sync started (still running). Data will appear in sheets shortly."
-        return "Fitbit sync completed. Read the sheets for latest data."
+            return f"ERROR: {result.stderr.strip()[:500]}"
+        return f"Fitbit sync completed. {result.stdout.strip()[-200:]}"
     except subprocess.TimeoutExpired:
-        return "Fitbit sync started but timed out waiting. Check sheets in a minute."
+        return "Fitbit sync timed out after 60s. Data may be partially updated."
 
 
 TOOL_DISPATCH = {
