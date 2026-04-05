@@ -6,6 +6,17 @@ Last updated: 2026-04-05
 
 **Any AI or human that changes any file in this repo MUST update this file in the same session.** If the "Last updated" date is old, verify against the actual files before trusting this doc.
 
+Every entry must include:
+1. **What** the component does
+2. **Why** it was built (what problem it solves)
+3. **What it connects to** (what feeds it, what it feeds)
+
+When removing a component: document what was removed, why, and what now handles its job. Example: "Removed X because Y now handles both X and Y's data. Y was updated to accept X's input format."
+
+When consolidating: document the removal AND the expanded responsibility. Don't just delete — explain what picks up the slack.
+
+**Why this rule exists:** Without it, features get removed that shouldn't be (because nobody knows why they were there), or kept when they're redundant (because nobody knows what else covers it). This doc is the single source of truth for the entire system.
+
 ## What This Is
 
 J.A.R.V.I.S. (Just A Rather Very Intelligent System) — a personal fitness coaching and life-tracking system accessible via Telegram. An AI (Grok 4.1 Fast via xAI) receives messages, interprets them, logs data to Google Sheets, and replies with coaching/analysis.
