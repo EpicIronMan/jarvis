@@ -1,0 +1,11 @@
+# Large/ephemeral data — not code
+logs/
+uploads/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
