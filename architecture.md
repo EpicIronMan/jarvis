@@ -39,6 +39,27 @@ If incoherence is found, flag it, investigate, and rewrite the affected sections
 
 **Why this rule exists:** Without it, features get removed that shouldn't be (because nobody knows why they were there), or kept when they're redundant (because nobody knows what else covers it). As the system evolves, stale docs are worse than no docs — they mislead. This doc is the single source of truth for the entire system and must stay coherent.
 
+## Core Principles (in priority order)
+
+**1. Integrity** — Data must be correct, complete, and verifiable. No point in being fast or cheap if the data is wrong, writes silently fail, or the AI hallucinates actions. Every write is verified. Every tool call is logged. QA runs daily.
+
+**2. Reliability** — The system must not break. Changes are snapshot-tested (before/after QA). Procedures are documented so any AI can follow them. Resolution tracking prevents chasing fixed problems. Architecture is audited monthly for coherence.
+
+**3. Efficiency** — Minimize tokens, code, files, and complexity — but never at the expense of #1 or #2. Specifically:
+- Use zero-token solutions (bash scripts) over AI calls wherever possible
+- Keep the codebase small (one file bot, not a framework)
+- Don't create files that nothing reads
+- Don't add features that duplicate existing ones
+- Use the cheapest AI model that achieves the required quality
+- Env-driven config over hardcoded values (swap, don't rewrite)
+
+**When integrity and efficiency conflict, integrity wins.** Example: read-after-write verification costs an extra Google Sheets API call per write. That's "inefficient" — but without it, we can't trust the data landed. So we keep it.
+
+**When evaluating any change, ask in order:**
+1. Does this maintain data integrity? (if no, stop)
+2. Does this maintain reliability? (if no, reconsider)
+3. Is this the most efficient way to achieve #1 and #2? (if no, simplify)
+
 ## What This Is
 
 J.A.R.V.I.S. (Just A Rather Very Intelligent System) — a personal fitness coaching and life-tracking system accessible via Telegram. An AI (Grok 4.1 Fast via xAI) receives messages, interprets them, logs data to Google Sheets, and replies with coaching/analysis.
