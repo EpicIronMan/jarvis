@@ -21,26 +21,50 @@ the user is on an aggressive cut (1000 cal/day deficit) from ~26% body fat targe
 ## System Overview
 
 ```
-the user's Phone (Telegram)
+Phone (Telegram)
        |
        v
 Telegram Bot API (polling)
        |
        v
 +--------------------------------------+
-|  /home/openclaw/lifeos/bot.py        |  <-- Single Python file (~400 lines)
-|  Grok 4.1 Fast via xAI (OpenAI SDK) |
+|  bot.py                              |  <-- Single Python file (~400 lines)
+|  AI model via OpenAI-compatible SDK  |
 |  Tools: log_workout, log_weight,     |
 |         log_nutrition, read_sheet,   |
 |         save_memory, read_memory,    |
-|         upload_to_drive              |
+|         upload_to_drive, sync_fitbit |
 +--------------------------------------+
        |
   +----+----------+
   v    v          v
 Google  Local    Google
 Sheets  Files    Drive
+  ^
+  |
+Fitbit API (3x/day auto-sync)
+  ^
+  |
+Renpho scale --> Renpho app --> Fitbit
+MyFitnessPal -----------------> Fitbit
 ```
+
+## Data Flow
+
+Data enters the system from these sources:
+
+| Source | How it gets to Google Sheets | Frequency |
+|--------|---------------------------|-----------|
+| Renpho scale | Renpho app → Fitbit → fitbit_sync.py | Auto 3x/day (or on-demand via Telegram) |
+| MyFitnessPal | MFP → Fitbit → fitbit_sync.py | Auto 3x/day (or on-demand via Telegram) |
+| Fitbit (sleep, steps, HR) | fitbit_sync.py | Auto 3x/day (or on-demand via Telegram) |
+| Workouts | User tells Jarvis on Telegram | Manual (user logs via chat) |
+| DEXA scans | User uploads PDF to Telegram → Jarvis extracts | Manual (every few weeks) |
+| Weight (manual) | User tells Jarvis on Telegram | Manual (backup if Renpho sync fails) |
+
+All data lands in Google Sheets. Jarvis reads from the sheets — it never goes to Fitbit/Renpho/MFP directly. Each row includes a Notes column with sync timestamp (e.g. "synced 12:00 ET") so you know how fresh the data is.
+
+**Why timestamps:** Without them, there's no way to know if a 175.3 lbs reading is from your morning weigh-in or stale data from yesterday's sync.
 
 ## Repository
 
@@ -49,16 +73,18 @@ Everything lives in one git repo: `/home/openclaw/lifeos/`
 Auto-committed hourly via cron. Use `git log` to see full history.
 
 ```
-/home/openclaw/lifeos/              <-- git repo root
+/home/openclaw/lifeos/              <-- git repo root + GitHub mirror
 |-- bot.py                          # The Telegram bot (entire application)
 |-- soul.md                         # AI system prompt (personality, rules, sheet schemas)
 |-- morning-brief.sh                # Daily 7am ET cron script (standalone, not part of bot)
 |-- architecture.md                 # This file (system map for any AI/human)
-|-- auto-commit.sh                  # Nightly git auto-commit script
-|-- lifeos-bot.service              # systemd unit file (canonical copy)
-|-- requirements.txt                # Python deps: openai, python-telegram-bot
 |-- procedures.md                   # Expected tool call patterns per operation
 |-- qa-check.sh                     # Daily integrity + procedure compliance check
+|-- resolve.sh                      # CLI tool to mark QA issues as resolved
+|-- resolved.jsonl                  # Log of resolved QA issues (checked before alerting)
+|-- auto-commit.sh                  # Hourly git commit + push to GitHub
+|-- lifeos-bot.service              # systemd unit file (canonical copy)
+|-- requirements.txt                # Python deps: openai, python-telegram-bot
 |-- openclaw.env.example            # Env var template (no real secrets)
 |-- .gitignore                      # Excludes logs/, uploads/, venv/
 |-- memory/                         # AI-writable persistent state (markdown files)
@@ -66,6 +92,9 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- uploads/                        # Telegram file uploads (gitignored)
 +-- venv/                           # Python virtual environment (gitignored)
 ```
+
+**GitHub mirror:** github.com/EpicIronMan/jarvis (public, auto-pushed hourly)
+**Why public:** Open source for community feedback and auditing. All personal info (IDs, keys, email) is in env file only — never in code or git history.
 
 ### What's tracked in git (auditable)
 - All code (bot.py)
@@ -85,7 +114,7 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 The entire application. ~400 lines of Python that:
 - Polls Telegram for messages from the authorized user (CHAT_ID from env)
 - Sends messages to Grok 4.1 Fast (xAI) via OpenAI-compatible API with soul.md as system prompt
-- Grok can call 7 tools: log_workout, log_weight, log_nutrition, read_sheet, save_memory, read_memory, upload_to_drive
+- AI can call 8 tools: log_workout, log_weight, log_nutrition, read_sheet, save_memory, read_memory, upload_to_drive, sync_fitbit
 - Tool results feed back to Grok until it produces a final text reply
 - Replies sent back to Telegram
 - All conversations logged to `logs/YYYY-MM-DD.jsonl`
@@ -219,28 +248,75 @@ Every message exchange is saved to `logs/YYYY-MM-DD.jsonl`. Each line:
 
 ## QA / Anti-Hallucination
 
-Three layers, ordered by cost:
+**Why this exists:** AI models can hallucinate — they may say "I logged your workout" without actually calling the tool, or pull body fat from the wrong sheet tab. We need to catch this without the user having to double-check everything manually. All QA is zero tokens (pure code/bash).
 
-**Layer 1: Read-after-write verification (zero tokens, every write)**
-Every tool that writes data (log_workout, log_weight, log_nutrition, save_memory) reads the data back immediately and appends `[VERIFIED]` or `[VERIFY FAILED]` to the tool result. The AI sees this. If it fails, the AI should tell the user.
+### Layer 1: Read-after-write verification (every write, zero tokens)
 
-**Layer 2: Daily integrity + procedure check (zero tokens, 8:30am ET cron)**
+Every tool that writes data (log_workout, log_weight, log_nutrition, save_memory) reads the data back immediately and appends `[VERIFIED]` or `[VERIFY FAILED]` to the tool result. The AI sees the verification status and should tell the user if it failed.
+
+**Why:** The OpenClaw sandbox bug showed that writes can silently fail. Read-after-write catches this at the moment it happens, not hours later.
+
+### Layer 2: Tool audit trail (every message, zero tokens)
+
+Every conversation log entry includes a `tools` array showing exactly which tools were called, with what inputs, and what results. Example:
+
+```json
+{"ts": "...", "user": "log bench 225x5x3", "assistant": "Logged!", "tools": [{"tool": "log_workout", "input": {...}, "result": "Logged 1 exercise [VERIFIED]"}]}
+```
+
+**Why:** If the bot says "I saved the routine and updated the changelog" but the tools array only shows one save_memory call, that's a caught hallucination. Any AI auditing the logs can flag the mismatch between claims and actions.
+
+### Layer 3: Daily integrity + procedure check (8:30am ET, zero tokens)
+
 `qa-check.sh` runs daily and checks:
-- Conversation log exists for today
-- No `[VERIFY FAILED]` entries in today's log
-- Yesterday's training was logged (unless rest day)
-- Yesterday's nutrition was logged
-- Weight logged in last 3 days
-- Bot service is running
-- Procedure compliance: did the bot read the right sheet tabs for the right operations?
-- Architecture drift: are all expected files present? Is git healthy?
 
-Sends a Telegram alert ONLY if issues are found. Silent if everything is fine.
+| Check | What it catches | Why it matters |
+|-------|----------------|----------------|
+| Conversation log exists | Bot may be down or not receiving messages | Catches service outages |
+| No `[VERIFY FAILED]` in logs | Writes that didn't land | Catches silent data loss |
+| Yesterday's training logged | Missed workout logging | Data completeness |
+| Yesterday's nutrition logged | Missed nutrition logging | Data completeness |
+| Weight in last 3 days | Scale sync may be broken | Catches Fitbit/Renpho issues |
+| Bot service running | Bot crashed | Catches service failures |
+| Fitbit timer active | Fitbit sync may have stopped | Catches pipeline failures |
+| Bot read Body Scans for BF% | Bot used wrong data source | Catches procedure violations |
+| Save promises match tool calls | Bot hallucinated file saves | Catches hallucinations |
+| Status reports read 3+ tabs | Bot gave incomplete report | Catches lazy data pulls |
+| All expected files exist | Someone deleted a key file | Catches architecture drift |
+| Git repo healthy | Auto-commit may be broken | Catches backup failures |
 
-**Layer 3: Tool audit trail (zero tokens, passive)**
-Every conversation log entry includes a `tools` array showing exactly which tools were called, with what inputs, and what results. Any AI can compare "what the bot said it did" vs "what the tool log shows it actually did."
+**Why procedure checks:** The bot should follow specific tool call patterns (defined in `procedures.md`). Example: when discussing body fat, it MUST read the Body Scans tab (DEXA data), NOT the Body Metrics tab (Renpho data). The QA catches when it takes shortcuts.
 
-**Procedures:** `procedures.md` defines the expected tool call patterns for each operation (status reports, logging workouts, discussing body fat, etc.). If the bot consistently deviates from a procedure, that's a signal to reassess: maybe the procedure is wrong, not the bot. Update whichever is actually incorrect.
+### Layer 4: Resolution tracking (zero tokens)
+
+`resolved.jsonl` stores issues that have been fixed. The QA script checks this file before alerting — if an issue key is already resolved, it skips it.
+
+**Why:** Without this, the QA keeps alerting on the same fixed problem forever. Wastes attention and causes alert fatigue. When a fix is applied, log it:
+
+```bash
+./resolve.sh "fitbit_sync_auth" "Fixed by running script directly instead of systemctl"
+```
+
+Each entry has: issue key, what fixed it, and the date. If the same issue reappears after a fix (meaning the fix didn't hold or a new change broke it), date-specific keys (like `no_training_2026-04-06`) won't match old resolutions, so it alerts again.
+
+**Why "tentative" resolution:** A fix might work today but break tomorrow if another change conflicts with it. The resolved file is a record of what was tried. If the QA flags the same pattern again, an AI can check the resolved file to see what was already attempted — avoiding chasing the same dead end twice.
+
+### Deviation handling
+
+If the bot consistently does something outside the defined procedures:
+1. QA flags it in the daily alert
+2. The user reviews with an AI (Claude Code, the bot itself, or both)
+3. Discussion: is the procedure wrong, or is the bot wrong?
+4. The user decides: update the procedure, fix the bot, or leave it
+5. Changes committed with reasoning in the git message
+
+**Why not auto-fix:** Deviations are signals, not bugs. Sometimes the bot found a better path and the procedure should be updated. Only the user decides.
+
+### Procedures (`procedures.md`)
+
+Defines the expected tool call patterns for each operation — which sheet tab for which data, what tools should be called for a status report, etc. This is the "correct path" that QA checks against.
+
+**Why it's a separate file:** Keeps architecture.md focused on the system map. procedures.md is the operational rulebook that changes more frequently as we learn what works.
 
 ## Troubleshooting Rule
 
@@ -286,7 +362,19 @@ The audit should be run by an AI (Claude Code or the bot) reading the actual dat
 
 ## History
 
+Each entry explains what changed AND why — so future audits can assess whether the reason still applies.
+
 - **2026-04-03:** OpenClaw (Node.js gateway + Docker sandbox + Grok 4.1 fast) deployed
-- **2026-04-05:** Replaced with LifeOS bot (single Python file). OpenClaw's sandbox had a `ModuleNotFoundError: No module named 'secrets'` bug preventing all file writes, plus unnecessary Docker/container complexity for a single-user bot.
-- **2026-04-05:** Initially used Claude Sonnet ($12/mo), switched to Grok 4.1 Fast ($0.50/mo). The original Grok problems were caused by the broken sandbox, not the model.
-- **2026-04-05:** Consolidated all files into single git repo with nightly auto-commit for full audit trail.
+- **2026-04-05:** Replaced OpenClaw with single Python file (`bot.py`). **Why:** OpenClaw's sandbox had a `ModuleNotFoundError: No module named 'secrets'` bug preventing all file writes. Docker sandbox, container system, and gateway abstraction were unnecessary complexity for a single-user bot.
+- **2026-04-05:** Initially used Claude Sonnet ($12/mo), switched to Grok 4.1 Fast ($0.50/mo). **Why:** Grok's problems were caused by the broken sandbox, not the model itself. With direct file access, Grok 4.1 works well at 24x lower cost.
+- **2026-04-05:** Made all config env-driven (AI_API_KEY, AI_BASE_URL, AI_MODEL, CHAT_ID, etc.). **Why:** Swap AI provider, chat platform, or Google resources by changing env vars, not code. Platform-agnostic by design.
+- **2026-04-05:** Injected current date/time into system prompt dynamically. **Why:** Grok had no clock — it was guessing day-of-week wrong (mapped Saturday to Wednesday). Now every message includes "Current date/time: Sunday, 2026-04-05 4:49 PM ET".
+- **2026-04-05:** Added read-after-write verification on all tool writes. **Why:** OpenClaw proved writes can silently fail. Verification catches this immediately.
+- **2026-04-05:** Added tool audit trail to conversation logs. **Why:** The bot said it would update CHANGELOG.md but only called save_memory once. The tool log catches claims vs actual actions.
+- **2026-04-05:** Added daily QA check (qa-check.sh). **Why:** Catches data gaps, procedure violations, service outages, and architecture drift — all at zero token cost.
+- **2026-04-05:** Added procedures.md. **Why:** Defines the "correct path" for each operation so QA can check compliance. If the bot deviates, we discuss whether the procedure or the bot is wrong.
+- **2026-04-05:** Added resolution tracking (resolved.jsonl + resolve.sh). **Why:** QA was flagging the same fixed issues repeatedly. Resolution log lets QA skip known fixes and avoid alert fatigue.
+- **2026-04-05:** Added sync_fitbit tool for on-demand data pulls. **Why:** Fitbit syncs 3x/day but user wanted fresh data on demand. Fixed auth issue (bot couldn't call systemctl, now runs script directly).
+- **2026-04-05:** Added sync timestamps to Fitbit data (Notes column). **Why:** Without timestamps, no way to know if data is from today's weigh-in or yesterday's stale sync.
+- **2026-04-05:** Rebranded to J.A.R.V.I.S., scrubbed all personal info, squashed git history, pushed to GitHub (public). **Why:** Open source for community review. Personal info (email, IDs, keys) stays in env file only.
+- **2026-04-05:** Consolidated into single git repo with hourly auto-commit + auto-push to GitHub. **Why:** Full audit trail. Any AI can run `git log` to see every change and why it was made.
