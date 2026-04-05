@@ -125,7 +125,7 @@ All exercises: 3 sets x 8 reps
 
 ## Google Sheets — How to Write Data with gog
 
-The Spreadsheet ID is provided via environment variable (SHEET_ID).
+The Spreadsheet ID is provided via environment variable (SHEET_ID). When the user asks for the sheet link, construct it as: `https://docs.google.com/spreadsheets/d/` + SHEET_ID + `/edit`
 
 ### Appending a row (most common)
 

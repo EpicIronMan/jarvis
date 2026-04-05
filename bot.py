@@ -58,11 +58,14 @@ _SOUL_TEXT = SOUL_PATH.read_text() if SOUL_PATH.exists() else ""
 
 
 def _build_system_prompt() -> str:
-    """Build system prompt with current date/time injected."""
+    """Build system prompt with current date/time and sheet link injected."""
     from zoneinfo import ZoneInfo
     now = datetime.datetime.now(ZoneInfo("America/Toronto"))
-    date_line = f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
-    return _SOUL_TEXT + date_line
+    context = (
+        f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
+        f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
+    )
+    return _SOUL_TEXT + context
 
 # --- gog environment ---
 GOG_ENV = {
