@@ -11,11 +11,22 @@ Every entry must include:
 2. **Why** it was built (what problem it solves)
 3. **What it connects to** (what feeds it, what it feeds)
 
-When removing a component: document what was removed, why, and what now handles its job. Example: "Removed X because Y now handles both X and Y's data. Y was updated to accept X's input format."
+**When adding:** Document what the new component does, why it's needed, what feeds it, and what it feeds. Example: "Added sync_fitbit tool. Why: user wanted on-demand data pulls, not just 3x/day. Connects: Telegram → bot.py → fitbit_sync.py → Google Sheets."
 
-When consolidating: document the removal AND the expanded responsibility. Don't just delete — explain what picks up the slack.
+**When removing:** Document what was removed, why, and what now handles its job. Example: "Removed X because Y now handles both X and Y's data. Y was updated to accept X's input format."
 
-**Why this rule exists:** Without it, features get removed that shouldn't be (because nobody knows why they were there), or kept when they're redundant (because nobody knows what else covers it). This doc is the single source of truth for the entire system.
+**When consolidating:** Document the removal AND the expanded responsibility. Don't just delete — explain what picks up the slack.
+
+**When modifying connections:** Document the old flow and the new flow. Example: "Before: Renpho → separate script → Sheet. After: Renpho → Fitbit → fitbit_sync.py → Sheet. Why: eliminates a redundant pipeline."
+
+**Coherence audits:** As features are added and removed, these notes accumulate and can become contradictory or stale. During the monthly audit (or anytime things feel unclear), review architecture.md for:
+- Components mentioned that no longer exist
+- Connections described that have been rerouted
+- "Why" reasons that no longer apply
+- Sections that contradict each other
+If incoherence is found, flag it, investigate, and rewrite the affected sections. The doc must always reflect the current system accurately.
+
+**Why this rule exists:** Without it, features get removed that shouldn't be (because nobody knows why they were there), or kept when they're redundant (because nobody knows what else covers it). As the system evolves, stale docs are worse than no docs — they mislead. This doc is the single source of truth for the entire system and must stay coherent.
 
 ## What This Is
 
@@ -360,12 +371,13 @@ When debugging the bot's behavior from an external AI (e.g. Claude Code terminal
 
 A structured review of the entire system. Can be triggered anytime by the user saying "run an audit." The audit asks:
 
-1. **Tools:** Are we using the best tools? Check for new releases, cheaper models, better APIs. Example: Claude Code added new features — does that replace anything we built?
-2. **Cost:** What did we spend this month? Is there a cheaper model that performs equally? Are we wasting tokens anywhere?
-3. **Errors:** Review QA alerts from the past month. Any patterns? Recurring procedure violations?
-4. **Speed:** Are responses fast enough? Any tool calls timing out? Is the bot polling efficiently?
-5. **Architecture:** Does the file structure still make sense? Any dead files? Any missing pieces?
-6. **Deviations:** Did the bot consistently work around any procedures? If so, the procedure may be wrong.
+1. **Documentation coherence:** Read architecture.md end to end. Are there contradictions? Components mentioned that no longer exist? Connections that have been rerouted but the old description remains? Fix any incoherence first — everything else depends on accurate docs.
+2. **Tools:** Are we using the best tools? Check for new releases, cheaper models, better APIs. Example: Claude Code added new features — does that replace anything we built?
+3. **Cost:** What did we spend this month? Is there a cheaper model that performs equally? Are we wasting tokens anywhere?
+4. **Errors:** Review QA alerts from the past month. Any patterns? Recurring procedure violations? Check resolved.jsonl — are old fixes still holding?
+5. **Speed:** Are responses fast enough? Any tool calls timing out? Is the bot polling efficiently?
+6. **Architecture:** Does the file structure still make sense? Any dead files? Any missing pieces?
+7. **Deviations:** Did the bot consistently work around any procedures? If so, the procedure may be wrong.
 
 Output: A report sent via Telegram + committed to git. All proposed changes follow the approval rule (APPROVE/REJECT/MODIFY).
 
