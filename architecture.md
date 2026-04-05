@@ -128,7 +128,26 @@ Runs hourly via cron. Commits any changes in the repo (memory files the bot writ
 **Schedule:** `0 * * * *` (root crontab, every hour on the hour)
 **Log:** `/home/openclaw/lifeos/auto-commit.log`
 
-### 5. Google Sheets (source of truth for all metrics)
+### 5. Fitbit Sync (`fitbit_sync.py` — external to this repo)
+
+Automated data pipeline that pulls from Fitbit API and writes to Google Sheets 3x/day.
+
+**Script:** `/home/openclaw/fitbit_sync.py`
+**Config:** `/home/openclaw/.config/fitbit/fitbit_config.json`
+**Tokens:** `/home/openclaw/.config/fitbit/tokens.json` (auto-refreshing OAuth2)
+**Log:** `/home/openclaw/.config/fitbit/sync.log`
+**Schedule:** systemd timer `fitbit-sync.timer` — 7am, 12pm, 10pm ET
+
+**Data pulled:**
+- Body Metrics tab: weight, body fat %, BMI (from Fitbit/Renpho scale)
+- Recovery tab: sleep score, sleep hours, steps, active minutes, resting HR
+- Nutrition tab: calories, macros (from MyFitnessPal → Fitbit sync)
+
+**To trigger manually:** `systemctl start fitbit-sync.service`
+
+This script is NOT in the Jarvis repo (it has its own credentials and config). It feeds the same Google Sheet that Jarvis reads from.
+
+### 6. Google Sheets (source of truth for all metrics)
 
 Spreadsheet ID: Set via `SHEET_ID` env var.
 

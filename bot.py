@@ -215,6 +215,21 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "sync_fitbit",
+            "description": (
+                "Trigger an immediate Fitbit data sync. Pulls latest weight, sleep, steps, "
+                "HRV, nutrition from Fitbit API into Google Sheets. Normally runs 3x/day "
+                "(7am, 12pm, 10pm ET) but this forces an immediate pull."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
 ]
 
 
@@ -381,6 +396,29 @@ def tool_upload_to_drive(data: dict) -> str:
     return result
 
 
+def tool_sync_fitbit(data: dict) -> str:
+    """Trigger an immediate Fitbit data sync."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "start", "fitbit-sync.service"],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            return f"ERROR: {result.stderr.strip()}"
+        # Wait briefly for sync to complete, then verify
+        import time
+        time.sleep(5)
+        check = subprocess.run(
+            ["systemctl", "is-active", "fitbit-sync.service"],
+            capture_output=True, text=True,
+        )
+        if check.stdout.strip() == "active":
+            return "Fitbit sync started (still running). Data will appear in sheets shortly."
+        return "Fitbit sync completed. Read the sheets for latest data."
+    except subprocess.TimeoutExpired:
+        return "Fitbit sync started but timed out waiting. Check sheets in a minute."
+
+
 TOOL_DISPATCH = {
     "log_workout": tool_log_workout,
     "log_weight": tool_log_weight,
@@ -389,6 +427,7 @@ TOOL_DISPATCH = {
     "save_memory": tool_save_memory,
     "read_memory": tool_read_memory,
     "upload_to_drive": tool_upload_to_drive,
+    "sync_fitbit": tool_sync_fitbit,
 }
 
 
