@@ -45,7 +45,7 @@ AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("XAI_API_KEY", "")
 AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.x.ai/v1")
 MODEL = os.environ.get("AI_MODEL", "grok-4-1-fast")
 MAX_TOOL_ROUNDS = int(os.environ.get("MAX_TOOL_ROUNDS", "10"))
-MAX_CONVERSATION_MESSAGES = int(os.environ.get("MAX_CONVERSATION_MESSAGES", "50"))
+MAX_CONVERSATION_MESSAGES = int(os.environ.get("MAX_CONVERSATION_MESSAGES", "200"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -495,6 +495,29 @@ def ask_ai(user_text: str, conversation: list[dict]) -> tuple[str, list]:
 conversations: dict[int, list] = {}
 
 
+def load_conversation_from_logs() -> list[dict]:
+    """Load today's conversation history from log file. Survives restarts."""
+    today = _today()
+    log_file = LOG_DIR / f"{today}.jsonl"
+    conv = []
+    if not log_file.exists():
+        return conv
+    try:
+        for line in log_file.read_text().strip().split("\n"):
+            if not line:
+                continue
+            entry = json.loads(line)
+            conv.append({"role": "user", "content": entry.get("user", "")})
+            conv.append({"role": "assistant", "content": entry.get("assistant", "")})
+    except Exception as e:
+        log.warning("Failed to load conversation history: %s", e)
+    # Keep last MAX_CONVERSATION_MESSAGES to stay within context limits
+    if len(conv) > MAX_CONVERSATION_MESSAGES:
+        conv = conv[-MAX_CONVERSATION_MESSAGES:]
+    log.info("Loaded %d messages from today's log", len(conv))
+    return conv
+
+
 def log_conversation(user_text: str, reply: str, tool_calls: list | None = None):
     today = _today()
     log_file = LOG_DIR / f"{today}.jsonl"
@@ -524,7 +547,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     log.info("Message from the user: %s", user_text[:100])
 
-    conv = conversations.setdefault(update.effective_chat.id, [])
+    conv = conversations.get(update.effective_chat.id)
+    if conv is None:
+        conv = load_conversation_from_logs()
+        conversations[update.effective_chat.id] = conv
 
     # Trim conversation history
     if len(conv) > MAX_CONVERSATION_MESSAGES:
