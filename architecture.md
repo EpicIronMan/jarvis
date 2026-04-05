@@ -19,6 +19,17 @@ Every entry must include:
 
 **When modifying connections:** Document the old flow and the new flow. Example: "Before: Renpho → separate script → Sheet. After: Renpho → Fitbit → fitbit_sync.py → Sheet. Why: eliminates a redundant pipeline."
 
+**Pre/post QA for major changes:** Any major removal, cleanup, or restructuring MUST follow this pattern:
+1. **Snapshot** — capture current state of all services, crons, auth, and key files
+2. **Change** — perform the removal or restructuring
+3. **Verify** — run the same snapshot checks and confirm everything still responds
+4. **Alert** — send a confirmation to Telegram (or flag failures)
+5. **Document** — update architecture.md with what was removed/changed and why
+
+This applies to: deleting files or directories, removing services, stopping crons, changing data pipelines, restructuring folders, Docker cleanup, or anything that could break an existing connection. When in doubt, snapshot first.
+
+**Why:** The OpenClaw-to-Jarvis migration and the orphan cleanup both used this pattern and caught issues (gog auth test initially failed post-cleanup). Without the verify step, that would have been a silent break discovered hours later.
+
 **Coherence audits:** As features are added and removed, these notes accumulate and can become contradictory or stale. During the monthly audit (or anytime things feel unclear), review architecture.md for:
 - Components mentioned that no longer exist
 - Connections described that have been rerouted
