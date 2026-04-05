@@ -431,6 +431,8 @@ Output: A report sent via Telegram + committed to git. All proposed changes foll
 
 The audit should be run by an AI (Claude Code or the bot) reading the actual data — logs, tool results, git history, cost estimates — not from memory.
 
+**Audit improvement rule:** Every time an issue is fixed, ask: "Would the audit have caught this?" If not, add a check. The audit gets smarter from real problems, not guesses.
+
 ## History
 
 Each entry explains what changed AND why — so future audits can assess whether the reason still applies.
