@@ -254,6 +254,7 @@ Any provider with an OpenAI-compatible chat completions API works with zero code
 | `0 7 * * *` ET | `morning-brief.sh` | Daily Telegram morning brief |
 | `0 * * * *` | `auto-commit.sh` | Hourly git snapshot |
 | `30 8 * * *` ET | `qa-check.sh` | Daily integrity check (alerts only on failure) |
+| `0 9 1 * *` ET | `monthly-audit.sh` | Monthly architecture audit report |
 
 ## Service Management
 
@@ -378,9 +379,15 @@ When debugging the bot's behavior from an external AI (e.g. Claude Code terminal
 5. Set up crons: `crontab -e` and add the two cron entries from the table above
 6. Authenticate gog: `gog auth login --account <email>`
 
-## Architecture Audit (Monthly, 1st of each month)
+## Architecture Audit (Monthly, 1st of each month at 9am ET)
 
-A structured review of the entire system. Can be triggered anytime by the user saying "run an audit." The audit asks:
+`monthly-audit.sh` runs automatically and sends a Telegram report with: git activity, QA summary, resolved issues, memory file health, service status, disk usage, orphan check, and recent changes. Zero tokens — pure bash data gathering.
+
+The report ends with a review checklist. The user replies to Jarvis (or opens Claude Code) to discuss any findings — that's when tokens are used, and only if needed.
+
+Can also be triggered anytime by saying "run an audit" to Jarvis or running `./monthly-audit.sh` manually.
+
+The audit should review:
 
 1. **Documentation coherence:** Read architecture.md end to end. Are there contradictions? Components mentioned that no longer exist? Connections that have been rerouted but the old description remains? Fix any incoherence first — everything else depends on accurate docs.
 2. **Tools:** Are we using the best tools? Check for new releases, cheaper models, better APIs. Example: Claude Code added new features — does that replace anything we built?
