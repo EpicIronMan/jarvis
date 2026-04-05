@@ -59,7 +59,8 @@ _SOUL_TEXT = SOUL_PATH.read_text() if SOUL_PATH.exists() else ""
 
 def _build_system_prompt() -> str:
     """Build system prompt with current date/time injected."""
-    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-4)))
+    from zoneinfo import ZoneInfo
+    now = datetime.datetime.now(ZoneInfo("America/Toronto"))
     date_line = f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
     return _SOUL_TEXT + date_line
 
@@ -252,7 +253,7 @@ def _run_gog(args: list[str], timeout: int = 30) -> str:
 
 def _today() -> str:
     return datetime.datetime.now(
-        datetime.timezone(datetime.timedelta(hours=-4))  # ET approximation
+        __import__('zoneinfo').ZoneInfo("America/Toronto")
     ).strftime("%Y-%m-%d")
 
 
