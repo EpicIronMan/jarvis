@@ -16,4 +16,5 @@ fi
 
 git add -A
 git -c user.email="jarvis@lifeos" -c user.name="J.A.R.V.I.S." commit -m "auto: snapshot $(TZ=America/Toronto date +%Y-%m-%d)"
-echo "Committed changes."
+git push origin master 2>/dev/null || echo "Push failed (will retry next hour)"
+echo "Committed and pushed."
