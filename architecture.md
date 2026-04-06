@@ -1,6 +1,6 @@
 # J.A.R.V.I.S. — Architecture Document
 
-Last updated: 2026-04-05
+Last updated: 2026-04-06
 
 ## Maintenance Rule
 
@@ -137,6 +137,7 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- resolve.sh                      # CLI tool to mark QA issues as resolved
 |-- resolved.jsonl                  # Log of resolved QA issues (checked before alerting)
 |-- decisions.log                   # Append-only decision log (why-this-over-that)
+|-- daily-audit-template.md         # End-of-day Claude Code audit checklist
 |-- qa-hits.jsonl                   # QA check hit tracking (fed into monthly audit)
 |-- auto-commit.sh                  # Hourly git commit + push to GitHub
 |-- lifeos-bot.service              # systemd unit file (canonical copy)
@@ -343,6 +344,10 @@ Every conversation log entry includes a `tools` array showing exactly which tool
 | 8a | Bot read Body Scans for BF% | Bot used wrong data source | Catches procedure violations |
 | 8b | Save promises match tool calls | Bot hallucinated file saves | Catches hallucinations |
 | 8c | Status reports read 3+ tabs | Bot gave incomplete report | Catches lazy data pulls |
+| 20 | Tool result errors not surfaced | Bot said "saved" but tool returned Permission denied or ERROR | Catches silent failures |
+| 21 | Memory file permissions | memory.md not owned by openclaw — bot can't write | Catches permission drift |
+| 22 | Said-vs-did (log/save claims vs tool calls) | Bot claimed to log/save but no matching tool call exists | Catches action hallucinations |
+| 23 | Exercise count mismatch | Bot discussed logging exercises but no log_workout calls found | Catches missed logging |
 | 9a | Empty directories | Orphaned folders from old features | Orphan detection |
 | 9b | Old openclaw service enabled | Forgotten service still running | Orphan detection |
 | 9c | Stale memory files (30d+) | Dead memory no one references | Orphan detection |
@@ -478,4 +483,12 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-06:** Expanded QA from 11 to 19 checks. Added: morning brief delivery (12), disk space (13), RAM (14), Fitbit data freshness (15), Google Sheets auth (16), Caddy health (17), sleep data freshness (18), git remote reachable (19). **Why:** These are all failure modes that break silently — you wouldn't know until you noticed stale data or a missing brief. Also added hit tracking (`qa-hits.jsonl`) so the monthly audit can report which checks fire often (valuable) vs never (candidates for removal).
 - **2026-04-06:** Added decisions.log — append-only decision log capturing options considered, what was chosen, and why. **Why:** architecture.md changelog captures *what* changed; decisions.log captures *why this over that*. Backfilled key decisions from 2026-04-05 and 2026-04-06. Monthly audit counts entries.
 - **2026-04-06:** Added QA effectiveness audit to monthly-audit.sh. **Why:** QA checks should be audited too — if a check never fires in 3 months, it's either perfectly reliable (good) or the check is broken (bad). Monthly review surfaces this. Includes recommendation notes for checks flagged as potentially low-value (9a, 9b, 8b).
+- **2026-04-06:** Removed anti-hallucination response stripping from conversation reload. Bot now loads its own full responses on restart, not just user messages with placeholders. **Why:** The stripping meant the bot didn't know what it already did or committed to after a restart. Hallucination risk is now mitigated by the daily QA audit (checks 20-23) and end-of-day Claude Code audit instead. Full context = bot knows what it logged, what it promised, and what failed.
+- **2026-04-06:** Fixed memory.md ownership (was root:root, now openclaw:openclaw). **Why:** Bot runs as openclaw but couldn't write to memory.md — every save_memory call silently failed. Bot told user saves succeeded when they didn't.
+- **2026-04-06:** Updated soul.md routine: Seated Cable Rows → Cable Rows. **Why:** User approved routine swap on 2026-04-06 due to back issues. Memory save failed (permission bug), soul.md was stale.
+- **2026-04-06:** Added QA checks 20-23 (silent tool errors, memory permissions, said-vs-did, exercise count mismatch). **Why:** Today's audit revealed the bot claimed actions it never took and hid tool errors. These checks catch those failures daily.
+- **2026-04-06:** Added daily-audit-template.md — end-of-day Claude Code audit checklist. **Why:** Bash QA catches mechanical failures; the daily audit catches reasoning errors, logic mistakes, and memory retention issues. Template covers: said-vs-did, logic check, memory retention, compliance, data integrity, backfills, model intuition tracking, and guardrail decisions.
+- **2026-04-06:** Added tool failure safety net to bot.py. Two layers: (1) `execute_tool` returns emphatic error instructing AI to tell the user, (2) `_append_failure_notice()` auto-appends failure notice if bot's reply doesn't mention tool errors. Applied to all three handlers (text, document, photo). **Why:** Bot told user "saved" when save_memory returned Permission denied. Model saw the error but ignored it. Code-level safety net makes the system self-correcting without adding model instructions.
+- **2026-04-06:** Added Cardio tab to Google Sheet + `log_cardio` tool to bot.py. Columns: Date, Exercise, Duration (min), Speed, Incline, Net Calories, MET Used, Data Source, Notes. Separate from Training Log to keep schemas clean. **Why:** Bot was hacking cardio into `log_workout` (reps=minutes, weight=speed), producing garbage data. Cardio needs duration/speed/incline/calories, not sets/reps/weight. Updated `read_sheet` available tabs to include Cardio.
+- **2026-04-06:** Saved workout logging decisions to memory.md: varying reps → multi-row, unilateral → per-side labels, cardio algorithm (net calories, MET formula, step overcount, caching rules). **Why:** These were agreed in conversation but never persisted due to the permission bug. Without them, the bot would forget these decisions every new day.
 - **2026-04-05:** Orphan cleanup. Removed: old `/home/openclaw/lifeos-bot/` directory (stale duplicate), Docker sandbox container + images (99MB, OpenClaw only), OpenClaw directories (agents, canvas, cron, devices, identity, logs, media, sandbox, tasks, telegram, credentials), stale workspace files (old SOUL.md, CHANGELOG.md, etc.). Kept: `.openclaw/workspace/homebrew/` (gog binary), `.openclaw/workspace/.config/gogcli/` (Google auth). **Why:** ~100MB of dead weight serving no purpose. **QA approach:** Snapshot all service states before cleanup → clean → verify same services still respond → send Telegram confirmation.

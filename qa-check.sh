@@ -236,6 +236,50 @@ if ! git ls-remote --exit-code origin HEAD > /dev/null 2>&1; then
     fi
 fi
 
+# --- Check 20: Tool result errors not surfaced to user ---
+if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
+    # Look for Permission denied, ERROR, FAILED in tool results where bot didn't tell user
+    TOOL_ERRORS=$(grep -oP '"result"\s*:\s*"[^"]*(?:Permission denied|ERROR|FAILED)[^"]*"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
+    if [ "$TOOL_ERRORS" -gt 0 ]; then
+        # Check if bot mentioned the error to user
+        ERROR_MENTIONS=$(grep -ci "permission denied\|error.*tool\|failed.*save\|could not write" "$LOG_DIR/$TODAY.jsonl" 2>/dev/null || true)
+        if [ "$TOOL_ERRORS" -gt "$ERROR_MENTIONS" ]; then
+            flag_issue "silent_tool_errors_$TODAY" "$TOOL_ERRORS tool errors today, only $ERROR_MENTIONS surfaced to user"
+        fi
+    fi
+fi
+
+# --- Check 21: Memory file permissions ---
+MEMORY_FILE="$REPO_DIR/memory/memory.md"
+if [ -f "$MEMORY_FILE" ]; then
+    MEMORY_OWNER=$(stat -c '%U' "$MEMORY_FILE")
+    if [ "$MEMORY_OWNER" != "openclaw" ]; then
+        flag_issue "memory_perms" "memory.md owned by $MEMORY_OWNER (should be openclaw) — bot cannot write"
+    fi
+fi
+
+# --- Check 22: Said-vs-did — bot claimed actions without matching tool calls ---
+if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
+    # Count times bot said "logged" or "saved" in assistant text
+    CLAIMED=$(grep -oP '"assistant"\s*:\s*"[^"]*(?:Logged|logged|Saved|saved to memory|saved to sheet)[^"]*"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
+    # Count actual tool calls
+    TOOL_CALLS=$(grep -oP '"tool"\s*:\s*"(?:log_workout|log_weight|log_nutrition|save_memory|write_sheet)"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
+    if [ "$CLAIMED" -gt 0 ] && [ "$TOOL_CALLS" -eq 0 ]; then
+        flag_issue "said_not_did_$TODAY" "Bot claimed $CLAIMED log/save actions but made $TOOL_CALLS tool calls"
+    fi
+fi
+
+# --- Check 23: Exercise count mismatch — bot's stated total vs actual logged exercises ---
+if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
+    # Count unique exercise names the bot mentioned logging
+    EXERCISES_MENTIONED=$(grep -oP '"assistant"[^}]*(?:Pull Ups|Lat Pull|Cable Row|Reverse Pec|Preacher|Treadmill|Bench|Squat|Leg Press|Leg Curl|Leg Extension|Shoulder Press|Cable Fl|Cable Raise|Captain Chair)[^"]*logged' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
+    # Count actual log_workout calls
+    EXERCISES_LOGGED=$(grep -oP '"tool"\s*:\s*"log_workout"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
+    if [ "$EXERCISES_MENTIONED" -gt 0 ] && [ "$EXERCISES_LOGGED" -eq 0 ]; then
+        flag_issue "exercises_not_logged_$TODAY" "Bot discussed logging exercises but no log_workout calls found"
+    fi
+fi
+
 # --- Send alert if unresolved issues found ---
 if [ -n "$ISSUES" ]; then
     MSG=$(printf "*QA Check — %s*\n\nIssues found:\n%b\n\nReview or ask J.A.R.V.I.S. to investigate." "$TODAY" "$ISSUES")

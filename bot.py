@@ -163,10 +163,34 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "log_cardio",
+            "description": (
+                "Log a cardio session to the Cardio Google Sheet tab. "
+                "Columns: Date | Exercise | Duration (min) | Speed | Incline | Net Calories | MET Used | Data Source | Notes. "
+                "Use this for treadmill, cycling, HIIT, running, swimming, etc. NOT for strength training."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "exercise": {"type": "string", "description": "e.g. Treadmill, Outdoor Run, Cycling, HIIT, Spin Class"},
+                    "duration_min": {"type": "number", "description": "Duration in minutes"},
+                    "speed": {"type": "number", "description": "Speed (mph or equivalent), 0 if N/A"},
+                    "incline": {"type": "number", "description": "Incline %, 0 if flat"},
+                    "net_calories": {"type": "number", "description": "Net calories burned (gross minus baseline). Must be research-backed, not estimated."},
+                    "met_used": {"type": "number", "description": "MET value used for the calculation"},
+                    "notes": {"type": "string", "default": "", "description": "Calculation breakdown, formula, or other context"},
+                },
+                "required": ["exercise", "duration_min", "net_calories", "met_used"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_sheet",
             "description": (
                 "Read recent rows from any tab in the Google Sheet. "
-                "Available tabs: Training Log, Body Metrics, Nutrition, Recovery, Body Scans, Body Measurements"
+                "Available tabs: Training Log, Body Metrics, Nutrition, Recovery, Body Scans, Body Measurements, Cardio"
             ),
             "parameters": {
                 "type": "object",
@@ -446,6 +470,31 @@ def tool_log_workout(data: dict) -> str:
     return f"Logged {len(exercises)} exercises, total volume: {total_volume:,} lbs.{verify}"
 
 
+def tool_log_cardio(data: dict) -> str:
+    date = _today()
+    row = [[
+        date,
+        data["exercise"],
+        str(data["duration_min"]),
+        str(data.get("speed", "")),
+        str(data.get("incline", "")),
+        str(data["net_calories"]),
+        str(data["met_used"]),
+        "TELEGRAM",
+        data.get("notes", ""),
+    ]]
+    result = _run_gog([
+        "sheets", "append", SHEET_ID, "Cardio!A:I",
+        "--values-json", json.dumps(row),
+        "--insert", "INSERT_ROWS",
+        "--input", "RAW",
+    ])
+    if result.startswith("ERROR"):
+        return result
+    verify = _verify_sheet_write("Cardio", date, data["exercise"])
+    return f"Logged cardio: {data['exercise']} {data['duration_min']}min, {data['net_calories']} net cal (MET {data['met_used']}).{verify}"
+
+
 def tool_log_weight(data: dict) -> str:
     date = _today()
     lbs = data["weight_lbs"]
@@ -643,6 +692,7 @@ def tool_sync_fitbit(data: dict) -> str:
 
 TOOL_DISPATCH = {
     "log_workout": tool_log_workout,
+    "log_cardio": tool_log_cardio,
     "log_weight": tool_log_weight,
     "log_nutrition": tool_log_nutrition,
     "read_sheet": tool_read_sheet,
@@ -660,6 +710,18 @@ TOOL_DISPATCH = {
 TOOLS_WITH_CONVERSATION = {"read_pdf"}
 
 
+def _append_failure_notice(reply: str, tools_used: list[dict]) -> str:
+    """If any tool failed and the bot didn't mention it, append a notice."""
+    failed = [t for t in tools_used if "TOOL FAILED" in t.get("result", "") or "ERROR" in t.get("result", "")]
+    if not failed:
+        return reply
+    failure_keywords = ("fail", "error", "could not", "unable", "didn't work", "permission denied")
+    if not any(kw in reply.lower() for kw in failure_keywords):
+        notice = "\n\n⚠️ " + " | ".join(f"{t['tool']} failed" for t in failed) + " — action(s) did NOT complete."
+        return reply + notice
+    return reply
+
+
 def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = None) -> str:
     fn = TOOL_DISPATCH.get(name)
     if not fn:
@@ -670,7 +732,7 @@ def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = 
         return fn(input_data)
     except Exception as e:
         log.exception("Tool %s failed", name)
-        return f"ERROR: {e}"
+        return f"⚠️ TOOL FAILED — {name}: {e}. YOU MUST tell the user this action failed. Do NOT say it succeeded."
 
 
 # --- Grok conversation loop (OpenAI-compatible API) ---
@@ -738,13 +800,11 @@ conversations: dict[int, list] = {}
 
 
 def load_conversation_from_logs() -> list[dict]:
-    """Reload today's conversation from log, but only user messages.
+    """Reload today's conversation from log with full assistant responses.
 
-    Why not reload assistant responses: if the AI hallucinated (e.g. said
-    174.6 lbs when the sheet shows 175.3), that hallucination would get
-    baked into history and repeated forever. By only loading user messages
-    with a brief summary placeholder for assistant turns, the AI knows
-    what was discussed but re-derives all data from fresh tool calls.
+    Full context reload — the bot sees its own prior responses and tool
+    calls so it knows what it already did and committed to. Hallucination
+    risk is mitigated by the daily QA audit rather than stripping history.
     """
     today = _today()
     log_file = LOG_DIR / f"{today}.jsonl"
@@ -757,14 +817,16 @@ def load_conversation_from_logs() -> list[dict]:
                 continue
             entry = json.loads(line)
             user_msg = entry.get("user", "")
+            assistant_msg = entry.get("assistant", "")
             if user_msg:
                 conv.append({"role": "user", "content": user_msg})
-                conv.append({"role": "assistant", "content": "(responded — pull fresh data if needed)"})
+            if assistant_msg:
+                conv.append({"role": "assistant", "content": assistant_msg})
     except Exception as e:
         log.warning("Failed to load conversation history: %s", e)
     if len(conv) > MAX_CONVERSATION_MESSAGES:
         conv = conv[-MAX_CONVERSATION_MESSAGES:]
-    log.info("Loaded %d user messages from today's log", len(conv) // 2)
+    log.info("Loaded %d messages from today's log", len(conv))
     return conv
 
 
@@ -773,6 +835,7 @@ def log_conversation(user_text: str, reply: str, tool_calls: list | None = None)
     log_file = LOG_DIR / f"{today}.jsonl"
     entry = {
         "ts": datetime.datetime.now().isoformat(),
+        "model": MODEL,
         "user": user_text,
         "assistant": reply,
     }
@@ -813,6 +876,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("AI API error")
         reply = f"Something went wrong: {e}"
 
+    reply = _append_failure_notice(reply, tools_used)
     log_conversation(user_text, reply, tools_used)
 
     # Telegram has a 4096 char limit per message
@@ -887,6 +951,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("AI API error")
         reply = f"Something went wrong: {e}"
 
+    reply = _append_failure_notice(reply, tools_used)
     log_conversation(user_text_for_log, reply, tools_used)
     for i in range(0, len(reply), 4096):
         await update.message.reply_text(reply[i : i + 4096])
@@ -916,6 +981,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         reply = f"Something went wrong: {e}"
 
+    reply = _append_failure_notice(reply, tools_used)
     log_conversation(user_text, reply, tools_used)
     for i in range(0, len(reply), 4096):
         await update.message.reply_text(reply[i : i + 4096])
