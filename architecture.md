@@ -113,7 +113,7 @@ Data enters the system from these sources:
 | MyFitnessPal | MFP → Fitbit → fitbit_sync.py | Auto 3x/day (or on-demand via Telegram) |
 | Fitbit (sleep, steps, HR) | fitbit_sync.py | Auto 3x/day (or on-demand via Telegram) |
 | Workouts | User tells Jarvis on Telegram | Manual (user logs via chat) |
-| DEXA scans | User uploads PDF to Telegram → Jarvis extracts | Manual (every few weeks) |
+| DEXA scans | User uploads PDF to Telegram → pdf2image converts to page images → AI reads via vision | Manual (every few weeks) |
 | Weight (manual) | User tells Jarvis on Telegram | Manual (backup if Renpho sync fails) |
 
 All data lands in Google Sheets. Jarvis reads from the sheets — it never goes to Fitbit/Renpho/MFP directly. Each row includes a Notes column with sync timestamp (e.g. "synced 12:00 ET") so you know how fresh the data is.
@@ -168,15 +168,17 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 The entire application. ~400 lines of Python that:
 - Polls Telegram for messages from the authorized user (CHAT_ID from env)
 - Sends messages to Grok 4.1 Fast (xAI) via OpenAI-compatible API with soul.md as system prompt
-- AI can call 8 tools: log_workout, log_weight, log_nutrition, read_sheet, save_memory, read_memory, upload_to_drive, sync_fitbit
+- AI can call 9 tools: log_workout, log_weight, log_nutrition, read_sheet, save_memory, read_memory, upload_to_drive, read_pdf, sync_fitbit
 - Tool results feed back to Grok until it produces a final text reply
 - Replies sent back to Telegram
 - All conversations logged to `logs/YYYY-MM-DD.jsonl`
 - Handles text messages, file uploads (documents), and photo uploads
+- PDF uploads are converted to images via pdf2image/poppler and sent as multimodal vision content so the AI can read the document directly (e.g. DEXA scans, blood work)
 - `/clear` command resets conversation history
 
 **Runtime:** Python 3.12 in venv at `/home/openclaw/lifeos/venv/`
-**Dependencies:** `openai`, `python-telegram-bot`
+**Dependencies:** `openai`, `python-telegram-bot`, `pdf2image`, `Pillow`
+**System dependency:** `poppler-utils` (for PDF→image conversion)
 **Runs as:** systemd service `lifeos-bot` under user `openclaw`
 **Cost:** ~$0.50/month (Grok 4.1 Fast: $0.20/MTok in, $0.50/MTok out)
 
@@ -452,4 +454,5 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-05:** Added sync timestamps to Fitbit data (Notes column). **Why:** Without timestamps, no way to know if data is from today's weigh-in or yesterday's stale sync.
 - **2026-04-05:** Rebranded to J.A.R.V.I.S., scrubbed all personal info, squashed git history, pushed to GitHub (public). **Why:** Open source for community review. Personal info (email, IDs, keys) stays in env file only.
 - **2026-04-05:** Consolidated into single git repo with hourly auto-commit + auto-push to GitHub. **Why:** Full audit trail. Any AI can run `git log` to see every change and why it was made.
+- **2026-04-06:** Added PDF vision reading. PDFs uploaded via Telegram are converted to page images (pdf2image + poppler) and sent as multimodal vision content to the AI. Also added `read_pdf` tool so the AI can re-read any previously uploaded PDF on demand. **Why:** The bot claimed to "extract" DEXA data from PDFs but couldn't — it only saved the file path. Text extraction (pdfplumber) would be cheaper but less reliable for formatted reports with tables/graphics. Vision is more accurate (integrity > efficiency). New deps: `pdf2image`, `Pillow`, `poppler-utils`.
 - **2026-04-05:** Orphan cleanup. Removed: old `/home/openclaw/lifeos-bot/` directory (stale duplicate), Docker sandbox container + images (99MB, OpenClaw only), OpenClaw directories (agents, canvas, cron, devices, identity, logs, media, sandbox, tasks, telegram, credentials), stale workspace files (old SOUL.md, CHANGELOG.md, etc.). Kept: `.openclaw/workspace/homebrew/` (gog binary), `.openclaw/workspace/.config/gogcli/` (Google auth). **Why:** ~100MB of dead weight serving no purpose. **QA approach:** Snapshot all service states before cleanup → clean → verify same services still respond → send Telegram confirmation.

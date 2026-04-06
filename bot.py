@@ -15,6 +15,8 @@ import datetime
 import logging
 import pathlib
 import asyncio
+import base64
+import io
 
 from telegram import Update
 from telegram.ext import (
@@ -219,6 +221,27 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "read_pdf",
+            "description": (
+                "Read a previously uploaded PDF file using AI vision. Converts PDF pages "
+                "to images and injects them into the conversation so you can see the content. "
+                "Use this to extract data from DEXA scans, blood work, or any uploaded PDF."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "Filename in the uploads directory (e.g. 'dexa_scan.pdf')",
+                    },
+                },
+                "required": ["filename"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "sync_fitbit",
             "description": (
                 "Trigger an immediate Fitbit data sync. Pulls latest weight, sleep, steps, "
@@ -255,6 +278,18 @@ def _today() -> str:
     return datetime.datetime.now(
         __import__('zoneinfo').ZoneInfo("America/Toronto")
     ).strftime("%Y-%m-%d")
+
+
+def _pdf_to_base64_images(pdf_path: str, max_pages: int = 5) -> list[str]:
+    """Convert PDF pages to base64-encoded JPEG images for AI vision."""
+    from pdf2image import convert_from_path
+    images = convert_from_path(pdf_path, dpi=200, first_page=1, last_page=max_pages)
+    b64_images = []
+    for img in images:
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        b64_images.append(base64.b64encode(buf.getvalue()).decode("utf-8"))
+    return b64_images
 
 
 def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
@@ -392,6 +427,34 @@ def tool_upload_to_drive(data: dict) -> str:
     return result
 
 
+def tool_read_pdf(data: dict, conversation: list[dict] | None = None) -> str:
+    """Read a PDF by converting to images and injecting into conversation for AI vision."""
+    filename = data["filename"]
+    pdf_path = UPLOAD_DIR / filename
+    if not pdf_path.exists():
+        # Try matching without exact case
+        for f in UPLOAD_DIR.iterdir():
+            if f.name.lower() == filename.lower():
+                pdf_path = f
+                break
+        else:
+            return f"ERROR: File not found: {filename}. Available files: {', '.join(f.name for f in UPLOAD_DIR.iterdir() if f.suffix.lower() == '.pdf')}"
+    try:
+        b64_images = _pdf_to_base64_images(str(pdf_path))
+        if conversation is not None:
+            # Inject images as a user message so the AI can see them
+            content_parts = [{"type": "text", "text": f"[PDF content from {filename} — {len(b64_images)} page(s):]"}]
+            for i, b64 in enumerate(b64_images):
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                })
+            conversation.append({"role": "user", "content": content_parts})
+        return f"PDF loaded: {filename} ({len(b64_images)} page(s)). The pages are now visible to you as images above."
+    except Exception as e:
+        return f"ERROR reading PDF: {e}"
+
+
 def tool_sync_fitbit(data: dict) -> str:
     """Trigger an immediate Fitbit data sync by running the script directly."""
     try:
@@ -415,15 +478,21 @@ TOOL_DISPATCH = {
     "save_memory": tool_save_memory,
     "read_memory": tool_read_memory,
     "upload_to_drive": tool_upload_to_drive,
+    "read_pdf": tool_read_pdf,
     "sync_fitbit": tool_sync_fitbit,
 }
 
+# Tools that need conversation context injected (for multimodal content)
+TOOLS_WITH_CONVERSATION = {"read_pdf"}
 
-def execute_tool(name: str, input_data: dict) -> str:
+
+def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = None) -> str:
     fn = TOOL_DISPATCH.get(name)
     if not fn:
         return f"Unknown tool: {name}"
     try:
+        if name in TOOLS_WITH_CONVERSATION:
+            return fn(input_data, conversation=conversation)
         return fn(input_data)
     except Exception as e:
         log.exception("Tool %s failed", name)
@@ -438,9 +507,13 @@ client = OpenAI(
 )
 
 
-def ask_ai(user_text: str, conversation: list[dict]) -> tuple[str, list]:
-    """Send user message to AI, handle tool calls, return (reply, tool_log)."""
-    conversation.append({"role": "user", "content": user_text})
+def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, list]:
+    """Send user message to AI, handle tool calls, return (reply, tool_log).
+
+    user_content can be a plain string or a list of content parts (for multimodal
+    messages containing images, e.g. when a PDF is uploaded).
+    """
+    conversation.append({"role": "user", "content": user_content})
     tool_log = []
 
     for _ in range(MAX_TOOL_ROUNDS):
@@ -473,7 +546,7 @@ def ask_ai(user_text: str, conversation: list[dict]) -> tuple[str, list]:
             fn_name = tc.function.name
             fn_args = json.loads(tc.function.arguments)
             log.info("Tool call: %s(%s)", fn_name, json.dumps(fn_args)[:200])
-            result = execute_tool(fn_name, fn_args)
+            result = execute_tool(fn_name, fn_args, conversation=conversation)
             log.info("Tool result: %s", result[:200])
             tool_log.append({"tool": fn_name, "input": fn_args, "result": result[:500]})
             conversation.append({
@@ -581,7 +654,12 @@ async def handle_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle file uploads — download and pass to AI."""
+    """Handle file uploads — download and pass to AI.
+
+    PDFs are converted to images and sent as multimodal vision content so the AI
+    can actually read the document (e.g. DEXA scans, blood work). Other files are
+    passed as text references.
+    """
     if not update.message or not update.effective_chat:
         return
     if update.effective_chat.id != CHAT_ID:
@@ -598,7 +676,29 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log.info("Downloaded file: %s", local_path)
 
     caption = update.message.caption or ""
-    user_text = f"[File uploaded: {filename} saved to {local_path}] {caption}".strip()
+
+    # For PDFs: convert to images and send as multimodal content so AI can see them
+    if filename.lower().endswith(".pdf"):
+        try:
+            b64_images = _pdf_to_base64_images(str(local_path))
+            content_parts = [
+                {"type": "text", "text": f"[PDF uploaded: {filename} saved to {local_path} — {len(b64_images)} page(s)] {caption}".strip()},
+            ]
+            for b64 in b64_images:
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                })
+            user_content = content_parts
+            log.info("PDF converted to %d page image(s) for AI vision", len(b64_images))
+        except Exception as e:
+            log.exception("PDF conversion failed, falling back to text-only")
+            user_content = f"[File uploaded: {filename} saved to {local_path} (PDF conversion failed: {e})] {caption}".strip()
+    else:
+        user_content = f"[File uploaded: {filename} saved to {local_path}] {caption}".strip()
+
+    # For logging, always store the text version
+    user_text_for_log = f"[File uploaded: {filename} saved to {local_path}] {caption}".strip()
 
     conv = conversations.setdefault(CHAT_ID, [])
     if len(conv) > MAX_CONVERSATION_MESSAGES:
@@ -606,12 +706,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     tools_used = []
     try:
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
+        reply, tools_used = await asyncio.to_thread(ask_ai, user_content, conv)
     except Exception as e:
         log.exception("AI API error")
         reply = f"Something went wrong: {e}"
 
-    log_conversation(user_text, reply, tools_used)
+    log_conversation(user_text_for_log, reply, tools_used)
     for i in range(0, len(reply), 4096):
         await update.message.reply_text(reply[i : i + 4096])
 
