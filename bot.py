@@ -834,15 +834,48 @@ WRITE_TOOLS = {"write_sheet", "clear_row", "log_workout", "log_cardio", "log_wei
 
 def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> str:
     """If the bot claims it wrote/updated/fixed data but made no write tool calls, append warning."""
-    claim_keywords = ("updated", "fixed", "corrected", "logged", "written", "cleared", "deleted", "removed", "saved to")
+    import re
+    # Match phrases where the bot claims it JUST performed a write action (not past descriptions)
+    action_phrases = (
+        r"i(?:'ve| have) (?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
+        r"(?:updated|fixed|corrected|logged|cleared|deleted|removed|saved|added|appended) (?:the|your|it|row|entry|data)",
+        r"(?:executing|done|complete).*(?:delet|clear|remov|updat|fix|log|writ|sav)",
+        r"let me (?:correct|fix|update|delete|remove|clear|log|save|add)",
+        r"i (?:will|can|shall) (?:now )?(?:correct|fix|update|delete|remove|clear|log|save|add)",
+        r"the (?:sheet|tab|row|entry|data) (?:has been|is now|was) (?:updated|fixed|corrected|cleared|deleted|removed|saved)",
+    )
     reply_lower = reply.lower()
-    if not any(kw in reply_lower for kw in claim_keywords):
+    claimed = any(re.search(p, reply_lower) for p in action_phrases)
+    if not claimed:
         return reply
     used_write_tool = any(t.get("tool") in WRITE_TOOLS for t in tools_used)
     if used_write_tool:
         return reply
-    # Bot claimed a write action but didn't call any write tool
     return reply + "\n\n⚠️ _I claimed to make changes but didn't call a write tool. The data was NOT changed. Tell me to actually do it._"
+
+
+def _clean_content(reply: str) -> str:
+    """Strip model-generated prefixes and fix markdown before adding our own prefix."""
+    import re
+    # Strip agent name/emoji prefixes the model might add
+    reply = re.sub(r'^(?:🤖🔬|🤖|🔬)\s*\n?', '', reply).lstrip()
+    reply = re.sub(r'^(?:J\.A\.R\.V\.I\.S\.|F\.R\.I\.D\.A\.Y\.)\s*>?\s*\n?', '', reply, flags=re.IGNORECASE).lstrip()
+    # Convert ### Header → *Header* (bold)
+    reply = re.sub(r'^#{1,4}\s+(.+)$', r'*\1*', reply, flags=re.MULTILINE)
+    # Convert ***text*** → *text*
+    reply = re.sub(r'\*{3,}(.+?)\*{3,}', r'*\1*', reply, flags=re.DOTALL)
+    # Convert **text** → *text* (MarkdownV2 bold)
+    reply = re.sub(r'\*\*(.+?)\*\*', r'*\1*', reply)
+    # Clean up remaining 3+ asterisks
+    reply = re.sub(r'\*{3,}', '*', reply)
+    return reply
+
+
+def _escape_markdownv2(reply: str) -> str:
+    """Escape special chars for Telegram MarkdownV2 (run right before sending)."""
+    import re
+    reply = re.sub(r'([.!()\-=+{}\[\]|~>#])', r'\\\1', reply)
+    return reply
 
 
 def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = None) -> str:
@@ -871,13 +904,16 @@ def _research_system_prompt() -> str:
     from zoneinfo import ZoneInfo
     now = datetime.datetime.now(ZoneInfo("America/Toronto"))
     return (
-        "You are a research assistant in LifeOS (research mode). "
-        "You have access to the same tools as admin mode. "
-        "Your job: deep reasoning, factual research, precise calculations (calories, MET, exercise science, nutrition). "
+        "You are F.R.I.D.A.Y. — the research agent in LifeOS. "
+        "J.A.R.V.I.S. (admin mode) handles daily operations. You handle deep reasoning. "
+        "You have access to the same tools as J.A.R.V.I.S. "
+        "Do NOT include your name or any header like 'F.R.I.D.A.Y. >' in your responses — the system adds an emoji identifier automatically. "
+        "Your job: factual research, precise calculations (calories, MET, exercise science, nutrition). "
         "Show your math. Cite sources when possible. Be thorough but concise. "
-        "You have full conversation context from admin mode. "
+        "Do not use ### headers or *** formatting — use **bold** only. "
+        "You have full conversation context from J.A.R.V.I.S. "
         "When you're done with the research task, tell the user: "
-        "'Research complete. Say **switch back** to return to admin mode.'\n"
+        "'Research complete. Say **switch back** to return to J.A.R.V.I.S.'\n"
         f"\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
         f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
     )
@@ -968,6 +1004,11 @@ def load_conversation_from_logs() -> list[dict]:
             entry = json.loads(line)
             user_msg = entry.get("user", "")
             assistant_msg = entry.get("assistant", "")
+            # Strip emoji prefixes from history so model doesn't copy them
+            if assistant_msg:
+                import re as _re
+                assistant_msg = _re.sub(r'^[🤖🔬\s]+\n?', '', assistant_msg).lstrip()
+                assistant_msg = _re.sub(r'^(?:J\.A\.R\.V\.I\.S\.|F\.R\.I\.D\.A\.Y\.)\s*>\s*\n?', '', assistant_msg).lstrip()
             if user_msg:
                 conv.append({"role": "user", "content": user_msg})
             if assistant_msg:
@@ -1025,17 +1066,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     research_triggers = ("switch to research", "research mode", "switch research", "/research")
     if user_lower in research_triggers:
         chat_mode[cid] = "research"
-        reply = "🔬 **Research mode active** (Grok 4.20)\n\nI have full conversation context. What do you need researched?\n\nSay **switch back** when you're done."
+        reply = "🤖🔬\nResearch mode active. I have full conversation context. What do you need researched?\n\nSay **switch back** when you're done."
         log_conversation(user_text, reply, mode="research")
-        await update.message.reply_text(reply)
+        await update.message.reply_text(reply, parse_mode="MarkdownV2")
         return
 
     admin_triggers = ("switch back", "admin mode", "switch admin", "/admin", "go back", "switch to admin", "back to admin", "done researching")
     if any(trigger in user_lower for trigger in admin_triggers) and mode == "research":
         chat_mode[cid] = "admin"
-        reply = "Back in **admin mode** (GPT-4.1-nano). I can see everything from research mode. What's next?"
+        reply = "🤖\nBack in admin mode. What's next?"
         log_conversation(user_text, reply, mode="admin")
-        await update.message.reply_text(reply)
+        await update.message.reply_text(reply, parse_mode="MarkdownV2")
         return
 
     # Auto-switch to research for cardio exercises (admin mode only)
@@ -1066,13 +1107,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 log.exception("AI API error")
                 reply = f"Something went wrong: {e}"
-            if not reply.startswith("🔬"):
-                reply = "🔬 " + reply
+            if not reply.startswith("🤖"):
+                reply = "🤖🔬\n" + reply
             reply = _append_failure_notice(reply, tools_used)
             reply = _append_write_hallucination_notice(reply, tools_used)
             log_conversation(user_text, reply, tools_used, mode="research")
             for i in range(0, len(reply), 4096):
-                await update.message.reply_text(reply[i : i + 4096])
+                await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
             return
 
     # Trim conversation history
@@ -1086,25 +1127,79 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log.exception("AI API error")
         reply = f"Something went wrong: {e}"
 
-    # Prefix research mode responses with indicator
-    if mode == "research" and not reply.startswith("🔬"):
-        reply = "🔬 " + reply
+    # Clean model-generated prefixes and markdown before adding our prefix
+    reply = _clean_content(reply)
+
+    # Prefix responses with agent emoji
+    if mode == "research" and not reply.startswith("🤖"):
+        reply = "🤖🔬\n" + reply
+    elif mode == "admin":
+        reply = "🤖\n" + reply
 
     reply = _append_failure_notice(reply, tools_used)
-    reply = _append_write_hallucination_notice(reply, tools_used)
 
-    # If admin mode gave a research-type answer without using the research tool, nudge
+    # If admin mode claimed a write but didn't call a write tool, auto-escalate to Grok
     if mode == "admin":
-        research_keywords = ("calori", "met value", "met ", "kcal", "burn rate", "bmr", "tdee", "macro")
-        used_research = any(t.get("tool") == "research" for t in tools_used)
-        if not used_research and any(kw in reply.lower() for kw in research_keywords):
-            reply += "\n\n⚠️ _This is an estimate. Say **switch to research** for a precise, research-backed answer from Grok 4.20._"
+        import re as _re
+        _action_phrases = (
+            r"i(?:'ve| have) (?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
+            r"(?:updated|fixed|corrected|logged|cleared|deleted|removed|saved|added|appended) (?:the|your|it|row|entry|data)",
+            r"(?:executing|done|complete).*(?:delet|clear|remov|updat|fix|log|writ|sav)",
+            r"let me (?:correct|fix|update|delete|remove|clear|log|save|add)",
+            r"i (?:will|can|shall)[\w\s]{0,20}(?:correct|fix|update|delete|remove|clear|log|save|add)",
+            r"the (?:sheet|tab|row|entry|data) (?:has been|is now|was) (?:updated|fixed|corrected|cleared|deleted|removed|saved)",
+        )
+        # Also detect refusals — admin saying it can't do something it has tools for
+        _refusal_phrases = (
+            r"(?:cannot|can't|don't|do not)[\w\s]{0,10}(?:access|identify|find|modify|delete|remove|clear)",
+            r"(?:don't|do not) have (?:\w+ )?(?:capability|ability|permission|access)",
+            r"(?:provide|give) (?:me )?(?:the )?row number",
+            r"without the row number",
+            r"(?:don't|do not) have direct access",
+        )
+        _reply_lower = reply.lower()
+        claimed_write = any(_re.search(p, _reply_lower) for p in _action_phrases)
+        refused = any(_re.search(p, _reply_lower) for p in _refusal_phrases)
+        did_write = any(t.get("tool") in WRITE_TOOLS for t in tools_used)
+        if (claimed_write or refused) and not did_write:
+            log.info("Admin claimed write without tool call — escalating to Grok 4.20")
+            chat_mode[cid] = "research"
+            escalation_prompt = (
+                f"Admin mode failed to execute a write action. The user said: \"{user_text}\"\n"
+                "Admin's response claimed changes were made but no write tool was called.\n"
+                "Please actually do what the user asked — use the appropriate tools (write_sheet, clear_row, log_workout, log_cardio, etc.).\n"
+                "After completing, say: 'Done. Say **switch back** to return to admin mode.'"
+            )
+            try:
+                reply, tools_used = await asyncio.to_thread(ask_ai, escalation_prompt, conv, mode="research")
+                if not reply.startswith("🤖"):
+                    reply = "🤖🔬\n" + reply
+                reply = _append_failure_notice(reply, tools_used)
+                reply = _append_write_hallucination_notice(reply, tools_used)
+                mode = "research"
+            except Exception as e:
+                log.exception("Grok escalation failed")
+                reply += "\n\n⚠️ _Auto-escalation to Grok failed. Say **switch to research** to try manually._"
+
+        # If admin mode estimated research answers (and didn't escalate), nudge
+        # But not if it read from the sheet — that's reporting, not estimating
+        if mode == "admin":
+            research_keywords = ("calori", "met value", "met ", "kcal", "burn rate", "bmr", "tdee", "macro")
+            used_research = any(t.get("tool") == "research" for t in tools_used)
+            used_read = any(t.get("tool") == "read_sheet" for t in tools_used)
+            if not used_research and not used_read and any(kw in reply.lower() for kw in research_keywords):
+                reply += "\n\n⚠️ _This is an estimate. Say **switch to research** for a precise, research-backed answer from Grok 4.20._"
+
+    # Research mode — still apply write hallucination check
+    if mode == "research":
+        reply = _append_write_hallucination_notice(reply, tools_used)
 
     log_conversation(user_text, reply, tools_used, mode=mode)
 
     # Telegram has a 4096 char limit per message
+    reply = _escape_markdownv2(reply)
     for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i : i + 4096])
+        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
 
 
 async def handle_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1176,13 +1271,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = f"Something went wrong: {e}"
 
     mode = chat_mode.get(CHAT_ID, "admin")
-    if mode == "research" and not reply.startswith("🔬"):
-        reply = "🔬 " + reply
+    if mode == "research" and not reply.startswith("🤖"):
+        reply = "🤖🔬\n" + reply
     reply = _append_failure_notice(reply, tools_used)
     reply = _append_write_hallucination_notice(reply, tools_used)
     log_conversation(user_text_for_log, reply, tools_used, mode=mode)
+    reply = _escape_markdownv2(reply)
     for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i : i + 4096])
+        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1211,13 +1307,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = f"Something went wrong: {e}"
 
     mode = chat_mode.get(CHAT_ID, "admin")
-    if mode == "research" and not reply.startswith("🔬"):
-        reply = "🔬 " + reply
+    if mode == "research" and not reply.startswith("🤖"):
+        reply = "🤖🔬\n" + reply
     reply = _append_failure_notice(reply, tools_used)
     reply = _append_write_hallucination_notice(reply, tools_used)
     log_conversation(user_text, reply, tools_used, mode=mode)
+    reply = _escape_markdownv2(reply)
     for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i : i + 4096])
+        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
 
 
 def main():
