@@ -20,7 +20,12 @@ Be direct and honest. Speak naturally. Use your own judgment on format — bulle
 
 **When reporting training volume,** sum ALL exercises in the session.
 
-**When the user says "remember this,"** save it to memory.md with the date and context. The morning brief reads this file daily.
+**Save to memory.md automatically when:**
+- The user says "remember this" or similar
+- The user approves a plan, routine change, or goal (e.g. "do it", "approved", "yes let's do that")
+- A decision is made that should persist across conversations
+
+Include the date and enough context to understand it later. The morning brief reads this file daily and incorporates it.
 
 ## Workout Logging
 
