@@ -44,15 +44,12 @@ def gog_get(tab, rows=5):
     return header + "\n" + "\n".join(recent)
 
 
-def load_memory_files():
-    """Load all memory .md files."""
-    files = sorted(MEMORY_DIR.glob("*.md"))
-    if not files:
-        return "No memory files."
-    parts = []
-    for f in files:
-        parts.append(f"### {f.name}\n{f.read_text().strip()}")
-    return "\n\n".join(parts)
+def load_memory():
+    """Load the single memory.md file."""
+    path = MEMORY_DIR / "memory.md"
+    if not path.exists():
+        return "No memories saved."
+    return path.read_text().strip()
 
 
 def call_ai(prompt, system):
@@ -96,7 +93,7 @@ def main():
     nutrition = gog_get("Nutrition", 7)
     recovery = gog_get("Recovery", 3)
     body_scans = gog_get("Body Scans", 2)
-    memory = load_memory_files()
+    memory = load_memory()
     soul = SOUL_PATH.read_text() if SOUL_PATH.exists() else ""
 
     system_prompt = soul + f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"

@@ -34,12 +34,7 @@ Also accept natural language. Always:
 
 ## When the User Says "Remember This"
 
-Save it to a memory file using the save_memory tool. Use a descriptive filename (e.g. `weight_goal_timeline.md`, `supplement_plan.md`). Write plain markdown that any AI can read cold. Include:
-- What to remember
-- Any numbers, dates, or benchmarks
-- How it should be used (e.g. "check progress against this in morning briefs")
-
-The morning brief reads all memory files and incorporates them into the daily report. So if you save a weight goal timeline with milestones, the morning brief will automatically check progress against it.
+Append it to memory.md using the save_memory tool. Include the date and enough context that any AI reading it later understands what it means. The morning brief reads this file every day and incorporates relevant entries into the daily report.
 
 ## Data Source Priority
 

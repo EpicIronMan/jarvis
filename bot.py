@@ -180,14 +180,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "save_memory",
-            "description": "Save a markdown file to local memory for future reference.",
+            "description": "Append an entry to memory.md — the single file where all remembered info is stored. Include the date and context.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "filename": {"type": "string", "description": "Filename (e.g. goals.md)"},
-                    "content": {"type": "string", "description": "Markdown content"},
+                    "entry": {"type": "string", "description": "What to remember (e.g. '2026-04-06: Weight goal timeline — target 150lbs by July, 1.5lbs/week')"},
                 },
-                "required": ["filename", "content"],
+                "required": ["entry"],
             },
         },
     },
@@ -195,12 +194,10 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_memory",
-            "description": "Read a memory file, or list all memory files if no filename given.",
+            "description": "Read memory.md — the file containing everything the user asked to remember.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "filename": {"type": "string", "description": "Filename to read, or omit to list all files"},
-                },
+                "properties": {},
             },
         },
     },
@@ -362,30 +359,22 @@ def tool_read_sheet(data: dict) -> str:
 
 
 def tool_save_memory(data: dict) -> str:
-    filename = pathlib.Path(data["filename"]).name  # strip path traversal
-    if not filename.endswith(".md"):
-        filename += ".md"
-    path = MEMORY_DIR / filename
-    # Unescape literal \n from AI models that send escaped newlines
-    content = data["content"].replace("\\n", "\n")
-    path.write_text(content)
-    # Verify write
-    if path.exists() and path.read_text() == content:
-        return f"Saved {path} [VERIFIED]"
-    return f"Saved {path} [VERIFY FAILED: file content mismatch]"
+    path = MEMORY_DIR / "memory.md"
+    entry = data["entry"].replace("\\n", "\n").strip()
+    # Append to the single memory file
+    with open(path, "a") as f:
+        f.write(f"\n- {entry}\n")
+    # Verify
+    content = path.read_text()
+    if entry in content:
+        return f"Remembered [VERIFIED]"
+    return f"Save failed [VERIFY FAILED]"
 
 
 def tool_read_memory(data: dict) -> str:
-    filename = data.get("filename")
-    if not filename:
-        files = sorted(MEMORY_DIR.glob("*.md"))
-        if not files:
-            return "No memory files found."
-        return "Memory files:\n" + "\n".join(f"- {f.name}" for f in files)
-    safe = pathlib.Path(filename).name
-    path = MEMORY_DIR / safe
+    path = MEMORY_DIR / "memory.md"
     if not path.exists():
-        return f"File not found: {safe}"
+        return "No memories saved yet."
     return path.read_text()
 
 
