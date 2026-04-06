@@ -46,6 +46,11 @@ SOUL_PATH = BASE_DIR / "soul.md"
 AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("XAI_API_KEY", "")
 AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.x.ai/v1")
 MODEL = os.environ.get("AI_MODEL", "grok-4-1-fast")
+# Research model — Grok 4.20 for deep reasoning tasks (calorie math, exercise science)
+RESEARCH_API_KEY = os.environ.get("XAI_API_KEY", "")
+RESEARCH_BASE_URL = "https://api.x.ai/v1"
+RESEARCH_MODEL = os.environ.get("RESEARCH_MODEL", "grok-4.20-0309-reasoning")
+
 MAX_TOOL_ROUNDS = int(os.environ.get("MAX_TOOL_ROUNDS", "10"))
 MAX_CONVERSATION_MESSAGES = int(os.environ.get("MAX_CONVERSATION_MESSAGES", "200"))
 
@@ -66,6 +71,12 @@ def _build_system_prompt() -> str:
     context = (
         f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
         f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
+        "\n**Agent modes:** You are in admin mode. For research-heavy tasks "
+        "(calorie calculations, MET values, exercise science, nutrition research, "
+        "anything requiring precise factual answers or deep reasoning), suggest: "
+        "'That requires some research. Want to switch to research mode?' "
+        "The user can say 'switch to research' to activate Grok 4.20. "
+        "Do NOT guess or estimate research questions yourself — suggest the switch.\n"
     )
     return _SOUL_TEXT + context
 
@@ -236,6 +247,55 @@ TOOLS = [
                     },
                 },
                 "required": ["range", "values", "reason"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clear_row",
+            "description": (
+                "Clear (blank out) a row or range in the Google Sheet. Use this to remove "
+                "bad data, duplicates, or entries that belong in a different tab. "
+                "First use read_sheet to find the row, then clear it. "
+                "IMPORTANT: You MUST call this tool to actually clear data — do NOT claim you cleared something without calling this."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "range": {
+                        "type": "string",
+                        "description": "Sheet range in A1 notation (e.g. 'Training Log!A5:J5' to clear row 5)",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Why this row is being cleared",
+                    },
+                },
+                "required": ["range", "reason"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "research",
+            "description": (
+                "Ask Grok 4.20 (advanced reasoning model) a research question. "
+                "Use this for calorie/MET calculations, exercise science, nutrition research, "
+                "or anything requiring factual accuracy and deep reasoning. "
+                "Do NOT guess or estimate — call this tool instead. "
+                "The result should be cached in memory or sheet Notes so you don't re-research the same question."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The research question. Be specific — include all relevant variables (weight, age, height, speed, incline, duration, etc.)",
+                    },
+                },
+                "required": ["question"],
             },
         },
     },
@@ -548,11 +608,18 @@ def tool_read_sheet(data: dict) -> str:
         return output
     lines = output.strip().split("\n")
     header = lines[0] if lines else ""
-    # Filter data rows, sort by date descending (newest first — matches sheet order)
-    data_lines = [l for l in lines[1:] if l.strip() and not l.startswith("←") and len(l) > 4 and l[0:4].isdigit()]
-    data_lines.sort(reverse=True)
-    recent = data_lines[:num_rows]
-    return header + "\n" + "\n".join(recent)
+    # Keep row numbers (1-indexed, row 1 = header) so bot can target rows for clear/write
+    numbered = []
+    for i, line in enumerate(lines[1:], start=2):
+        if line.strip() and not line.startswith("←") and len(line) > 4 and line[0:4].isdigit():
+            numbered.append((i, line))
+    # Sort by date descending (newest first)
+    numbered.sort(key=lambda x: x[1], reverse=True)
+    recent = numbered[:num_rows]
+    result_lines = [f"Row 1: {header}"]
+    for row_num, line in recent:
+        result_lines.append(f"Row {row_num}: {line}")
+    return "\n".join(result_lines)
 
 
 def tool_write_sheet(data: dict) -> str:
@@ -577,6 +644,44 @@ def tool_write_sheet(data: dict) -> str:
     if written_val in check:
         return f"Written to {range_str} [VERIFIED]. Reason: {reason}"
     return f"Write sent to {range_str} but could not verify value in read-back. Reason: {reason}"
+
+
+def tool_clear_row(data: dict) -> str:
+    """Clear a row/range in the Google Sheet."""
+    range_str = data["range"]
+    reason = data["reason"]
+    result = _run_gog([
+        "sheets", "clear", SHEET_ID, range_str,
+        "--no-input",
+    ])
+    if result.startswith("ERROR"):
+        return result
+    # Verify it's actually blank
+    check = _run_gog(["sheets", "get", SHEET_ID, range_str])
+    if check.startswith("ERROR") or check.strip() == "" or all(c in (' ', '\t', '\n') for c in check):
+        return f"Cleared {range_str}. Reason: {reason} [VERIFIED]"
+    return f"Clear sent to {range_str} but cells may not be empty. Read-back: {check[:200]}. Reason: {reason}"
+
+
+def tool_research(data: dict) -> str:
+    """Send a research question to Grok 4.20 for factual, deep-reasoning answers."""
+    question = data["question"]
+    try:
+        research_client = OpenAI(api_key=RESEARCH_API_KEY, base_url=RESEARCH_BASE_URL)
+        response = research_client.chat.completions.create(
+            model=RESEARCH_MODEL,
+            max_tokens=2048,
+            messages=[
+                {"role": "system", "content": "You are a research assistant. Give precise, factual, citation-backed answers. Show your math. Be concise."},
+                {"role": "user", "content": question},
+            ],
+        )
+        answer = response.choices[0].message.content or ""
+        log.info("Research result (%s): %s", RESEARCH_MODEL, answer[:200])
+        return f"[Research via {RESEARCH_MODEL}]\n{answer}"
+    except Exception as e:
+        log.exception("Research tool failed")
+        return f"⚠️ TOOL FAILED — research: {e}. YOU MUST tell the user this action failed. Do NOT say it succeeded."
 
 
 def tool_save_memory(data: dict) -> str:
@@ -697,6 +802,8 @@ TOOL_DISPATCH = {
     "log_nutrition": tool_log_nutrition,
     "read_sheet": tool_read_sheet,
     "write_sheet": tool_write_sheet,
+    "clear_row": tool_clear_row,
+    "research": tool_research,
     "save_memory": tool_save_memory,
     "read_memory": tool_read_memory,
     "upload_to_drive": tool_upload_to_drive,
@@ -722,6 +829,22 @@ def _append_failure_notice(reply: str, tools_used: list[dict]) -> str:
     return reply
 
 
+WRITE_TOOLS = {"write_sheet", "clear_row", "log_workout", "log_cardio", "log_weight", "log_nutrition", "save_memory"}
+
+
+def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> str:
+    """If the bot claims it wrote/updated/fixed data but made no write tool calls, append warning."""
+    claim_keywords = ("updated", "fixed", "corrected", "logged", "written", "cleared", "deleted", "removed", "saved to")
+    reply_lower = reply.lower()
+    if not any(kw in reply_lower for kw in claim_keywords):
+        return reply
+    used_write_tool = any(t.get("tool") in WRITE_TOOLS for t in tools_used)
+    if used_write_tool:
+        return reply
+    # Bot claimed a write action but didn't call any write tool
+    return reply + "\n\n⚠️ _I claimed to make changes but didn't call a write tool. The data was NOT changed. Tell me to actually do it._"
+
+
 def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = None) -> str:
     fn = TOOL_DISPATCH.get(name)
     if not fn:
@@ -743,20 +866,42 @@ client = OpenAI(
 )
 
 
-def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, list]:
+def _research_system_prompt() -> str:
+    """System prompt for research mode (Grok 4.20)."""
+    from zoneinfo import ZoneInfo
+    now = datetime.datetime.now(ZoneInfo("America/Toronto"))
+    return (
+        "You are a research assistant in LifeOS (research mode). "
+        "You have access to the same tools as admin mode. "
+        "Your job: deep reasoning, factual research, precise calculations (calories, MET, exercise science, nutrition). "
+        "Show your math. Cite sources when possible. Be thorough but concise. "
+        "You have full conversation context from admin mode. "
+        "When you're done with the research task, tell the user: "
+        "'Research complete. Say **switch back** to return to admin mode.'\n"
+        f"\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
+        f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
+    )
+
+
+def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admin") -> tuple[str, list]:
     """Send user message to AI, handle tool calls, return (reply, tool_log).
 
     user_content can be a plain string or a list of content parts (for multimodal
     messages containing images, e.g. when a PDF is uploaded).
+    mode: "admin" (GPT-4.1-nano) or "research" (Grok 4.20)
     """
     conversation.append({"role": "user", "content": user_content})
     tool_log = []
 
+    active_client = research_client if mode == "research" else client
+    active_model = RESEARCH_MODEL if mode == "research" else MODEL
+    system_prompt = _research_system_prompt() if mode == "research" else _build_system_prompt()
+
     for _ in range(MAX_TOOL_ROUNDS):
-        response = client.chat.completions.create(
-            model=MODEL,
+        response = active_client.chat.completions.create(
+            model=active_model,
             max_tokens=4096,
-            messages=[{"role": "system", "content": _build_system_prompt()}] + conversation,
+            messages=[{"role": "system", "content": system_prompt}] + conversation,
             tools=TOOLS,
         )
 
@@ -797,6 +942,11 @@ def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, lis
 # --- Conversation state and logging ---
 
 conversations: dict[int, list] = {}
+# Track which mode each chat is in: "admin" (default, GPT-4.1-nano) or "research" (Grok 4.20)
+chat_mode: dict[int, str] = {}
+
+# Research client (Grok 4.20)
+research_client = OpenAI(api_key=RESEARCH_API_KEY, base_url=RESEARCH_BASE_URL)
 
 
 def load_conversation_from_logs() -> list[dict]:
@@ -830,12 +980,14 @@ def load_conversation_from_logs() -> list[dict]:
     return conv
 
 
-def log_conversation(user_text: str, reply: str, tool_calls: list | None = None):
+def log_conversation(user_text: str, reply: str, tool_calls: list | None = None, mode: str = "admin"):
     today = _today()
     log_file = LOG_DIR / f"{today}.jsonl"
+    active_model = RESEARCH_MODEL if mode == "research" else MODEL
     entry = {
         "ts": datetime.datetime.now().isoformat(),
-        "model": MODEL,
+        "model": active_model,
+        "mode": mode,
         "user": user_text,
         "assistant": reply,
     }
@@ -860,10 +1012,68 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     log.info("Message from the user: %s", user_text[:100])
 
-    conv = conversations.get(update.effective_chat.id)
+    cid = update.effective_chat.id
+    conv = conversations.get(cid)
     if conv is None:
         conv = load_conversation_from_logs()
-        conversations[update.effective_chat.id] = conv
+        conversations[cid] = conv
+
+    mode = chat_mode.get(cid, "admin")
+
+    # Mode switch commands
+    user_lower = user_text.strip().lower()
+    research_triggers = ("switch to research", "research mode", "switch research", "/research")
+    if user_lower in research_triggers:
+        chat_mode[cid] = "research"
+        reply = "🔬 **Research mode active** (Grok 4.20)\n\nI have full conversation context. What do you need researched?\n\nSay **switch back** when you're done."
+        log_conversation(user_text, reply, mode="research")
+        await update.message.reply_text(reply)
+        return
+
+    admin_triggers = ("switch back", "admin mode", "switch admin", "/admin", "go back", "switch to admin", "back to admin", "done researching")
+    if any(trigger in user_lower for trigger in admin_triggers) and mode == "research":
+        chat_mode[cid] = "admin"
+        reply = "Back in **admin mode** (GPT-4.1-nano). I can see everything from research mode. What's next?"
+        log_conversation(user_text, reply, mode="admin")
+        await update.message.reply_text(reply)
+        return
+
+    # Auto-switch to research for cardio exercises (admin mode only)
+    cardio_keywords = ("treadmill", "cycling", "bike", "spin", "hiit", "jogging", "running", "swimming", "elliptical", "rowing machine", "stairmaster", "jump rope")
+    if mode == "admin" and any(kw in user_lower for kw in cardio_keywords):
+        # Check if it looks like exercise logging (has numbers like duration/speed/distance)
+        import re
+        has_numbers = bool(re.search(r'\d', user_text))
+        if has_numbers:
+            chat_mode[cid] = "research"
+            # Inject the user's message as context for Grok 4.20
+            cardio_prompt = (
+                f"The user logged a cardio exercise: \"{user_text}\"\n\n"
+                "1. Pull their latest weight from Body Metrics using read_sheet.\n"
+                "2. Calculate the precise NET calories burned using the ACSM metabolic equation. "
+                "Show your full math: VO2, gross calories, baseline subtraction, net result. "
+                "Cite the MET source.\n"
+                "3. Present the breakdown and ask: 'Approve this to log to the Cardio tab?'\n"
+                "4. Do NOT log until the user says approved.\n"
+                "5. After logging, say: 'Research complete. Say **switch back** to return to admin mode.'"
+            )
+            # Trim conversation history
+            if len(conv) > MAX_CONVERSATION_MESSAGES:
+                conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
+            tools_used = []
+            try:
+                reply, tools_used = await asyncio.to_thread(ask_ai, cardio_prompt, conv, mode="research")
+            except Exception as e:
+                log.exception("AI API error")
+                reply = f"Something went wrong: {e}"
+            if not reply.startswith("🔬"):
+                reply = "🔬 " + reply
+            reply = _append_failure_notice(reply, tools_used)
+            reply = _append_write_hallucination_notice(reply, tools_used)
+            log_conversation(user_text, reply, tools_used, mode="research")
+            for i in range(0, len(reply), 4096):
+                await update.message.reply_text(reply[i : i + 4096])
+            return
 
     # Trim conversation history
     if len(conv) > MAX_CONVERSATION_MESSAGES:
@@ -871,13 +1081,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     tools_used = []
     try:
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
+        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv, mode=mode)
     except Exception as e:
         log.exception("AI API error")
         reply = f"Something went wrong: {e}"
 
+    # Prefix research mode responses with indicator
+    if mode == "research" and not reply.startswith("🔬"):
+        reply = "🔬 " + reply
+
     reply = _append_failure_notice(reply, tools_used)
-    log_conversation(user_text, reply, tools_used)
+    reply = _append_write_hallucination_notice(reply, tools_used)
+
+    # If admin mode gave a research-type answer without using the research tool, nudge
+    if mode == "admin":
+        research_keywords = ("calori", "met value", "met ", "kcal", "burn rate", "bmr", "tdee", "macro")
+        used_research = any(t.get("tool") == "research" for t in tools_used)
+        if not used_research and any(kw in reply.lower() for kw in research_keywords):
+            reply += "\n\n⚠️ _This is an estimate. Say **switch to research** for a precise, research-backed answer from Grok 4.20._"
+
+    log_conversation(user_text, reply, tools_used, mode=mode)
 
     # Telegram has a 4096 char limit per message
     for i in range(0, len(reply), 4096):
@@ -946,13 +1169,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     tools_used = []
     try:
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_content, conv)
+        mode = chat_mode.get(CHAT_ID, "admin")
+        reply, tools_used = await asyncio.to_thread(ask_ai, user_content, conv, mode=mode)
     except Exception as e:
         log.exception("AI API error")
         reply = f"Something went wrong: {e}"
 
+    mode = chat_mode.get(CHAT_ID, "admin")
+    if mode == "research" and not reply.startswith("🔬"):
+        reply = "🔬 " + reply
     reply = _append_failure_notice(reply, tools_used)
-    log_conversation(user_text_for_log, reply, tools_used)
+    reply = _append_write_hallucination_notice(reply, tools_used)
+    log_conversation(user_text_for_log, reply, tools_used, mode=mode)
     for i in range(0, len(reply), 4096):
         await update.message.reply_text(reply[i : i + 4096])
 
@@ -977,12 +1205,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conv = conversations.setdefault(CHAT_ID, [])
     tools_used = []
     try:
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
+        mode = chat_mode.get(CHAT_ID, "admin")
+        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv, mode=mode)
     except Exception as e:
         reply = f"Something went wrong: {e}"
 
+    mode = chat_mode.get(CHAT_ID, "admin")
+    if mode == "research" and not reply.startswith("🔬"):
+        reply = "🔬 " + reply
     reply = _append_failure_notice(reply, tools_used)
-    log_conversation(user_text, reply, tools_used)
+    reply = _append_write_hallucination_notice(reply, tools_used)
+    log_conversation(user_text, reply, tools_used, mode=mode)
     for i in range(0, len(reply), 4096):
         await update.message.reply_text(reply[i : i + 4096])
 
