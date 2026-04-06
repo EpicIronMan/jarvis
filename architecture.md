@@ -138,6 +138,7 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- resolved.jsonl                  # Log of resolved QA issues (checked before alerting)
 |-- decisions.log                   # Append-only decision log (why-this-over-that)
 |-- daily-audit-template.md         # End-of-day Claude Code audit checklist
+|-- claude-sessions/                # Claude Code session summaries (for retrieval after terminal drops)
 |-- qa-hits.jsonl                   # QA check hit tracking (fed into monthly audit)
 |-- auto-commit.sh                  # Hourly git commit + push to GitHub
 |-- lifeos-bot.service              # systemd unit file (canonical copy)
@@ -168,22 +169,37 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 
 ### 1. Telegram Bot (`bot.py`)
 
-The entire application. ~400 lines of Python that:
-- Polls Telegram for messages from the authorized user (CHAT_ID from env)
-- Sends messages to Grok 4.1 Fast (xAI) via OpenAI-compatible API with soul.md as system prompt
-- AI can call 12 tools: log_workout, log_weight, log_nutrition, read_sheet, write_sheet, save_memory, read_memory, upload_to_drive, list_drive, download_from_drive, read_pdf, sync_fitbit
-- Tool results feed back to Grok until it produces a final text reply
-- Replies sent back to Telegram
-- All conversations logged to `logs/YYYY-MM-DD.jsonl`
-- Handles text messages, file uploads (documents), and photo uploads
-- PDF uploads are converted to images via pdf2image/poppler and sent as multimodal vision content so the AI can read the document directly (e.g. DEXA scans, blood work)
-- `/clear` command resets conversation history
+The entire application. ~1,275 lines of Python with dual-agent architecture:
+
+**Agents:**
+- 🤖 **J.A.R.V.I.S.** (admin mode) — GPT-4.1-nano via OpenAI API. Handles daily ops: logging, syncing, status, tool calls.
+- 🤖🔬 **F.R.I.D.A.Y.** (research mode) — Grok 4.20 via xAI API. Handles deep reasoning: calorie/MET calculations, exercise science, anything requiring factual precision.
+
+**Mode switching:**
+- User says "switch to research" / "switch back" (or "go back", "/research", "/admin")
+- Cardio keywords + numbers auto-switch to F.R.I.D.A.Y. for ACSM calculation → approval → log
+- If J.A.R.V.I.S. claims a write without calling a tool, or refuses ("I can't access"), auto-escalates to F.R.I.D.A.Y.
+
+**14 tools:** log_workout, log_cardio, log_weight, log_nutrition, read_sheet, write_sheet, clear_row, save_memory, read_memory, upload_to_drive, list_drive, download_from_drive, read_pdf, sync_fitbit
+
+**Safety nets (code-level, model-agnostic):**
+- `_append_failure_notice` — if tool errors aren't surfaced in reply
+- `_append_write_hallucination_notice` — if bot claims write with no write tool call
+- Auto-escalation — nano refusal/hallucination → Grok takes over
+- Research estimate warning — admin guesses calories without reading sheet
+- `_clean_content` — strips model-generated name prefixes and bad markdown
+- `_escape_markdownv2` — escapes special chars for Telegram rendering
+- `_send_reply` — shared send logic across all handlers (safety nets → log → escape → send)
+
+**Logging:** All conversations to `logs/YYYY-MM-DD.jsonl` with model name and mode (admin/research) per entry. Full conversation reload on restart (no stripping).
+
+**Formatting:** MarkdownV2 for bold rendering. No markdown headers, no triple asterisks — code strips them.
 
 **Runtime:** Python 3.12 in venv at `/home/openclaw/lifeos/venv/`
 **Dependencies:** `openai`, `python-telegram-bot`, `pdf2image`, `Pillow`
 **System dependency:** `poppler-utils` (for PDF→image conversion)
 **Runs as:** systemd service `lifeos-bot` under user `openclaw`
-**Cost:** ~$0.50/month (grok-4-1-fast-reasoning: $0.20/MTok in, $0.50/MTok out). Switched from grok-4.20 ($2/$6 per MTok) which burned $2-3 in 2 days. No mid-tier model exists — only Fast or 4.20 (10x price jump). Anti-hallucination stack (read-after-write, tool audit, QA checks, procedures.md) provides the safety net at the cheaper tier.
+**Cost:** Admin ~$0.10/$0.40 per MTok (nano). Research ~$2/$6 per MTok (Grok 4.20, rare calls). Daily cost: pennies.
 
 ### 2. Morning Brief Cron (`morning-brief.sh`)
 

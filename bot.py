@@ -279,29 +279,6 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "research",
-            "description": (
-                "Ask Grok 4.20 (advanced reasoning model) a research question. "
-                "Use this for calorie/MET calculations, exercise science, nutrition research, "
-                "or anything requiring factual accuracy and deep reasoning. "
-                "Do NOT guess or estimate — call this tool instead. "
-                "The result should be cached in memory or sheet Notes so you don't re-research the same question."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "The research question. Be specific — include all relevant variables (weight, age, height, speed, incline, duration, etc.)",
-                    },
-                },
-                "required": ["question"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "save_memory",
             "description": "Append an entry to memory.md — the single file where all remembered info is stored. Include the date and context.",
             "parameters": {
@@ -663,26 +640,6 @@ def tool_clear_row(data: dict) -> str:
     return f"Clear sent to {range_str} but cells may not be empty. Read-back: {check[:200]}. Reason: {reason}"
 
 
-def tool_research(data: dict) -> str:
-    """Send a research question to Grok 4.20 for factual, deep-reasoning answers."""
-    question = data["question"]
-    try:
-        research_client = OpenAI(api_key=RESEARCH_API_KEY, base_url=RESEARCH_BASE_URL)
-        response = research_client.chat.completions.create(
-            model=RESEARCH_MODEL,
-            max_tokens=2048,
-            messages=[
-                {"role": "system", "content": "You are a research assistant. Give precise, factual, citation-backed answers. Show your math. Be concise."},
-                {"role": "user", "content": question},
-            ],
-        )
-        answer = response.choices[0].message.content or ""
-        log.info("Research result (%s): %s", RESEARCH_MODEL, answer[:200])
-        return f"[Research via {RESEARCH_MODEL}]\n{answer}"
-    except Exception as e:
-        log.exception("Research tool failed")
-        return f"⚠️ TOOL FAILED — research: {e}. YOU MUST tell the user this action failed. Do NOT say it succeeded."
-
 
 def tool_save_memory(data: dict) -> str:
     path = MEMORY_DIR / "memory.md"
@@ -803,7 +760,6 @@ TOOL_DISPATCH = {
     "read_sheet": tool_read_sheet,
     "write_sheet": tool_write_sheet,
     "clear_row": tool_clear_row,
-    "research": tool_research,
     "save_memory": tool_save_memory,
     "read_memory": tool_read_memory,
     "upload_to_drive": tool_upload_to_drive,
@@ -869,6 +825,16 @@ def _clean_content(reply: str) -> str:
     # Clean up remaining 3+ asterisks
     reply = re.sub(r'\*{3,}', '*', reply)
     return reply
+
+
+async def _send_reply(update, user_text: str, reply: str, tools_used: list, mode: str = "admin"):
+    """Shared send logic: safety nets → log → escape → send."""
+    reply = _append_failure_notice(reply, tools_used)
+    reply = _append_write_hallucination_notice(reply, tools_used)
+    log_conversation(user_text, reply, tools_used, mode=mode)
+    reply = _escape_markdownv2(reply)
+    for i in range(0, len(reply), 4096):
+        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
 
 
 def _escape_markdownv2(reply: str) -> str:
@@ -980,28 +946,30 @@ def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admi
 conversations: dict[int, list] = {}
 # Track which mode each chat is in: "admin" (default, GPT-4.1-nano) or "research" (Grok 4.20)
 chat_mode: dict[int, str] = {}
+# Track if last admin message suggested research mode (so "yes" triggers switch)
+research_suggested: dict[int, bool] = {}
 
 # Research client (Grok 4.20)
 research_client = OpenAI(api_key=RESEARCH_API_KEY, base_url=RESEARCH_BASE_URL)
 
 
-def load_conversation_from_logs() -> list[dict]:
+def load_conversation_from_logs() -> tuple[list[dict], str]:
     """Reload today's conversation from log with full assistant responses.
 
-    Full context reload — the bot sees its own prior responses and tool
-    calls so it knows what it already did and committed to. Hallucination
-    risk is mitigated by the daily QA audit rather than stripping history.
+    Returns (conversation, last_mode) — last_mode preserves the agent mode across restarts.
     """
     today = _today()
     log_file = LOG_DIR / f"{today}.jsonl"
     conv = []
+    last_mode = "admin"
     if not log_file.exists():
-        return conv
+        return conv, last_mode
     try:
         for line in log_file.read_text().strip().split("\n"):
             if not line:
                 continue
             entry = json.loads(line)
+            last_mode = entry.get("mode", "admin")
             user_msg = entry.get("user", "")
             assistant_msg = entry.get("assistant", "")
             # Strip emoji prefixes from history so model doesn't copy them
@@ -1017,8 +985,8 @@ def load_conversation_from_logs() -> list[dict]:
         log.warning("Failed to load conversation history: %s", e)
     if len(conv) > MAX_CONVERSATION_MESSAGES:
         conv = conv[-MAX_CONVERSATION_MESSAGES:]
-    log.info("Loaded %d messages from today's log", len(conv))
-    return conv
+    log.info("Loaded %d messages from today's log (last mode: %s)", len(conv), last_mode)
+    return conv, last_mode
 
 
 def log_conversation(user_text: str, reply: str, tool_calls: list | None = None, mode: str = "admin"):
@@ -1056,23 +1024,55 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     conv = conversations.get(cid)
     if conv is None:
-        conv = load_conversation_from_logs()
+        conv, last_mode = load_conversation_from_logs()
         conversations[cid] = conv
+        if cid not in chat_mode:
+            chat_mode[cid] = last_mode
 
     mode = chat_mode.get(cid, "admin")
 
-    # Mode switch commands
+    # Mode switching — keyword-based, not exact phrase matching
     user_lower = user_text.strip().lower()
-    research_triggers = ("switch to research", "research mode", "switch research", "/research")
-    if user_lower in research_triggers:
+    yes_words = ("yes", "yeah", "yep", "sure", "ok", "okay", "do it", "go ahead")
+    wants_research = any(kw in user_lower for kw in ("research", "friday", "grok"))
+    wants_admin = any(kw in user_lower for kw in ("admin", "jarvis", "back"))
+    wants_yes = user_lower in yes_words
+
+    # Switch to research (from admin)
+    if mode == "admin" and (wants_research or (research_suggested.get(cid) and wants_yes)):
+        research_suggested[cid] = False
         chat_mode[cid] = "research"
-        reply = "🤖🔬\nResearch mode active. I have full conversation context. What do you need researched?\n\nSay **switch back** when you're done."
-        log_conversation(user_text, reply, mode="research")
-        await update.message.reply_text(reply, parse_mode="MarkdownV2")
+        mode = "research"
+        # Don't just greet — immediately hand off to F.R.I.D.A.Y. with context
+        # Look at the last few assistant messages to figure out what was being discussed
+        recent_context = ""
+        for msg in reversed(conv[-6:]):
+            if msg.get("role") == "assistant" and msg.get("content"):
+                recent_context = msg["content"][:300]
+                break
+        handoff = (
+            f"You are F.R.I.D.A.Y. (research mode). The user just switched from J.A.R.V.I.S. (admin mode). "
+            f"The user said: \"{user_text}\"\n"
+            f"Recent context from J.A.R.V.I.S.: \"{recent_context}\"\n"
+            "Pick up where J.A.R.V.I.S. left off. Do the research or verification the user is asking for. "
+            "Start working immediately — do not introduce yourself or ask what to do."
+        )
+        if len(conv) > MAX_CONVERSATION_MESSAGES:
+            conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
+        tools_used = []
+        try:
+            reply, tools_used = await asyncio.to_thread(ask_ai, handoff, conv, mode="research")
+        except Exception as e:
+            log.exception("AI API error")
+            reply = f"Something went wrong: {e}"
+        reply = _clean_content(reply)
+        if not reply.startswith("🤖"):
+            reply = "🤖🔬\n" + reply
+        await _send_reply(update, user_text, reply, tools_used, mode="research")
         return
 
-    admin_triggers = ("switch back", "admin mode", "switch admin", "/admin", "go back", "switch to admin", "back to admin", "done researching")
-    if any(trigger in user_lower for trigger in admin_triggers) and mode == "research":
+    # Switch to admin (from research)
+    if mode == "research" and (wants_admin or user_lower == "switch"):
         chat_mode[cid] = "admin"
         reply = "🤖\nBack in admin mode. What's next?"
         log_conversation(user_text, reply, mode="admin")
@@ -1109,11 +1109,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply = f"Something went wrong: {e}"
             if not reply.startswith("🤖"):
                 reply = "🤖🔬\n" + reply
-            reply = _append_failure_notice(reply, tools_used)
-            reply = _append_write_hallucination_notice(reply, tools_used)
-            log_conversation(user_text, reply, tools_used, mode="research")
-            for i in range(0, len(reply), 4096):
-                await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
+            await _send_reply(update, user_text, reply, tools_used, mode="research")
             return
 
     # Trim conversation history
@@ -1135,8 +1131,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = "🤖🔬\n" + reply
     elif mode == "admin":
         reply = "🤖\n" + reply
-
-    reply = _append_failure_notice(reply, tools_used)
 
     # If admin mode claimed a write but didn't call a write tool, auto-escalate to Grok
     if mode == "admin":
@@ -1174,8 +1168,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply, tools_used = await asyncio.to_thread(ask_ai, escalation_prompt, conv, mode="research")
                 if not reply.startswith("🤖"):
                     reply = "🤖🔬\n" + reply
-                reply = _append_failure_notice(reply, tools_used)
-                reply = _append_write_hallucination_notice(reply, tools_used)
                 mode = "research"
             except Exception as e:
                 log.exception("Grok escalation failed")
@@ -1185,21 +1177,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # But not if it read from the sheet — that's reporting, not estimating
         if mode == "admin":
             research_keywords = ("calori", "met value", "met ", "kcal", "burn rate", "bmr", "tdee", "macro")
-            used_research = any(t.get("tool") == "research" for t in tools_used)
             used_read = any(t.get("tool") == "read_sheet" for t in tools_used)
-            if not used_research and not used_read and any(kw in reply.lower() for kw in research_keywords):
+            if not used_read and any(kw in reply.lower() for kw in research_keywords):
                 reply += "\n\n⚠️ _This is an estimate. Say **switch to research** for a precise, research-backed answer from Grok 4.20._"
+                research_suggested[cid] = True
 
-    # Research mode — still apply write hallucination check
-    if mode == "research":
-        reply = _append_write_hallucination_notice(reply, tools_used)
+    # If reply suggests switching to research, flag so "yes" triggers it
+    if mode == "admin" and "switch to research" in reply.lower():
+        research_suggested[cid] = True
+    elif mode == "admin":
+        research_suggested[cid] = False
 
-    log_conversation(user_text, reply, tools_used, mode=mode)
-
-    # Telegram has a 4096 char limit per message
-    reply = _escape_markdownv2(reply)
-    for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
+    await _send_reply(update, user_text, reply, tools_used, mode=mode)
 
 
 async def handle_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1273,12 +1262,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mode = chat_mode.get(CHAT_ID, "admin")
     if mode == "research" and not reply.startswith("🤖"):
         reply = "🤖🔬\n" + reply
-    reply = _append_failure_notice(reply, tools_used)
-    reply = _append_write_hallucination_notice(reply, tools_used)
-    log_conversation(user_text_for_log, reply, tools_used, mode=mode)
-    reply = _escape_markdownv2(reply)
-    for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
+    await _send_reply(update, user_text_for_log, reply, tools_used, mode=mode)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1309,12 +1293,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mode = chat_mode.get(CHAT_ID, "admin")
     if mode == "research" and not reply.startswith("🤖"):
         reply = "🤖🔬\n" + reply
-    reply = _append_failure_notice(reply, tools_used)
-    reply = _append_write_hallucination_notice(reply, tools_used)
-    log_conversation(user_text, reply, tools_used, mode=mode)
-    reply = _escape_markdownv2(reply)
-    for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
+    await _send_reply(update, user_text, reply, tools_used, mode=mode)
 
 
 def main():
