@@ -38,10 +38,10 @@ def gog_get(tab, rows=5):
         return f"(could not read {tab})"
     lines = result.stdout.strip().split("\n")
     header = lines[0] if lines else ""
-    # Filter out empty rows and comments, sort by date column
+    # Filter data rows, sort newest first (matches sheet order)
     data_lines = [l for l in lines[1:] if l.strip() and not l.startswith("←") and l[0:4].isdigit()]
-    data_lines.sort()  # YYYY-MM-DD sorts correctly as strings
-    recent = data_lines[-rows:] if len(data_lines) > rows else data_lines
+    data_lines.sort(reverse=True)
+    recent = data_lines[:rows]
     return header + "\n" + "\n".join(recent)
 
 

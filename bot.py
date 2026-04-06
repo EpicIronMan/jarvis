@@ -258,14 +258,14 @@ def _today() -> str:
 
 
 def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
-    """Read back the last row of a sheet tab and verify the write landed."""
+    """Read back the sheet and verify the write landed (searches all rows for the date)."""
     check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:Z"])
     if check.startswith("ERROR"):
         return " [VERIFY FAILED: could not read sheet back]"
-    last_line = check.strip().split("\n")[-1]
-    if expected_date in last_line and expected_field in last_line:
-        return " [VERIFIED]"
-    return f" [VERIFY FAILED: last row does not match. Got: {last_line[:100]}]"
+    for line in check.strip().split("\n"):
+        if expected_date in line and expected_field in line:
+            return " [VERIFIED]"
+    return f" [VERIFY FAILED: could not find {expected_date} with {expected_field}]"
 
 
 def tool_log_workout(data: dict) -> str:
@@ -354,10 +354,10 @@ def tool_read_sheet(data: dict) -> str:
         return output
     lines = output.strip().split("\n")
     header = lines[0] if lines else ""
-    # Filter and sort by date so newest rows are last regardless of insertion order
+    # Filter data rows, sort by date descending (newest first — matches sheet order)
     data_lines = [l for l in lines[1:] if l.strip() and not l.startswith("←") and len(l) > 4 and l[0:4].isdigit()]
-    data_lines.sort()
-    recent = data_lines[-num_rows:] if len(data_lines) > num_rows else data_lines
+    data_lines.sort(reverse=True)
+    recent = data_lines[:num_rows]
     return header + "\n" + "\n".join(recent)
 
 
