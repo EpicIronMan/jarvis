@@ -354,7 +354,10 @@ def tool_read_sheet(data: dict) -> str:
         return output
     lines = output.strip().split("\n")
     header = lines[0] if lines else ""
-    recent = lines[-(num_rows):] if len(lines) > num_rows else lines[1:]
+    # Filter and sort by date so newest rows are last regardless of insertion order
+    data_lines = [l for l in lines[1:] if l.strip() and not l.startswith("←") and len(l) > 4 and l[0:4].isdigit()]
+    data_lines.sort()
+    recent = data_lines[-num_rows:] if len(data_lines) > num_rows else data_lines
     return header + "\n" + "\n".join(recent)
 
 

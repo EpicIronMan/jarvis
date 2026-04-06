@@ -28,7 +28,7 @@ AI_MODEL = os.environ.get("AI_MODEL", "grok-4-1-fast")
 
 
 def gog_get(tab, rows=5):
-    """Pull recent rows from a sheet tab."""
+    """Pull recent rows from a sheet tab, sorted by date (newest last)."""
     env = {**os.environ, "HOME": "/home/openclaw", "GOG_KEYRING_PASSWORD": os.environ.get("GOG_KEYRING_PASSWORD", "")}
     result = subprocess.run(
         [GOG, "sheets", "get", SHEET_ID, f"{tab}!A:Z", "--account", GOG_ACCOUNT, "--no-input"],
@@ -38,8 +38,9 @@ def gog_get(tab, rows=5):
         return f"(could not read {tab})"
     lines = result.stdout.strip().split("\n")
     header = lines[0] if lines else ""
-    # Filter out empty rows
-    data_lines = [l for l in lines[1:] if l.strip() and not l.startswith("←")]
+    # Filter out empty rows and comments, sort by date column
+    data_lines = [l for l in lines[1:] if l.strip() and not l.startswith("←") and l[0:4].isdigit()]
+    data_lines.sort()  # YYYY-MM-DD sorts correctly as strings
     recent = data_lines[-rows:] if len(data_lines) > rows else data_lines
     return header + "\n" + "\n".join(recent)
 
