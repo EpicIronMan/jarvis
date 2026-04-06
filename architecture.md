@@ -182,7 +182,7 @@ The entire application. ~400 lines of Python that:
 **Dependencies:** `openai`, `python-telegram-bot`, `pdf2image`, `Pillow`
 **System dependency:** `poppler-utils` (for PDF→image conversion)
 **Runs as:** systemd service `lifeos-bot` under user `openclaw`
-**Cost:** TBD — currently running Grok 4.20 (switched from Grok 4.1 Fast due to hallucination concerns). Pricing needs verification.
+**Cost:** ~$0.50/month (grok-4-1-fast-reasoning: $0.20/MTok in, $0.50/MTok out). Switched from grok-4.20 ($2/$6 per MTok) which burned $2-3 in 2 days. No mid-tier model exists — only Fast or 4.20 (10x price jump). Anti-hallucination stack (read-after-write, tool audit, QA checks, procedures.md) provides the safety net at the cheaper tier.
 
 ### 2. Morning Brief Cron (`morning-brief.sh`)
 
