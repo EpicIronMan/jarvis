@@ -168,7 +168,7 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 The entire application. ~400 lines of Python that:
 - Polls Telegram for messages from the authorized user (CHAT_ID from env)
 - Sends messages to Grok 4.1 Fast (xAI) via OpenAI-compatible API with soul.md as system prompt
-- AI can call 11 tools: log_workout, log_weight, log_nutrition, read_sheet, save_memory, read_memory, upload_to_drive, list_drive, download_from_drive, read_pdf, sync_fitbit
+- AI can call 12 tools: log_workout, log_weight, log_nutrition, read_sheet, write_sheet, save_memory, read_memory, upload_to_drive, list_drive, download_from_drive, read_pdf, sync_fitbit
 - Tool results feed back to Grok until it produces a final text reply
 - Replies sent back to Telegram
 - All conversations logged to `logs/YYYY-MM-DD.jsonl`
@@ -245,6 +245,8 @@ Spreadsheet ID: Set via `SHEET_ID` env var.
 | Body Scans | DEXA results | Date, Scan Type, Total Body Fat %, Lean Mass (lbs/kg), Bone Density, VAT, Regional BF%, etc. |
 
 Accessed via the `gog` CLI tool (path and account from env vars).
+
+**Notes convention:** Every tab has a Notes column. Notes explain *why* data was written or changed — they are context for any AI or human reading the sheet later. Examples: "synced 12:00 ET", "Added RMR — extracted from DEXA PDF 2026-04-02", "Corrected BF% from PDF ground truth". When the bot writes data via `write_sheet`, it must include a reason that gets logged in Notes. These notes are part of the audit trail — never delete them.
 
 ### 6. Google Drive (file uploads)
 

@@ -181,6 +181,43 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "write_sheet",
+            "description": (
+                "Write to any cell or range in the Google Sheet. Use for editing cells, "
+                "adding columns, or fixing data. Requires a reason explaining WHY the "
+                "change is being made — this gets written to the Notes column of the "
+                "affected row so any AI reading the sheet later understands the context. "
+                "For structural changes (new columns, deleted rows, changed layouts), "
+                "tell the user to have Claude Code update architecture.md and push to GitHub. "
+                "IMPORTANT: Show the user what you're about to write and get APPROVE before calling this."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "range": {
+                        "type": "string",
+                        "description": "Sheet range in A1 notation (e.g. 'Body Scans!P1' for a single cell, 'Body Scans!P1:P2' for a range)",
+                    },
+                    "values": {
+                        "type": "array",
+                        "description": "2D array of values to write (rows x cols), e.g. [['RMR (cal/day)'], ['1618']]",
+                        "items": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Why this change is being made (e.g. 'Extracted RMR from DEXA PDF 2026-04-02')",
+                    },
+                },
+                "required": ["range", "values", "reason"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "save_memory",
             "description": "Append an entry to memory.md — the single file where all remembered info is stored. Include the date and context.",
             "parameters": {
@@ -469,6 +506,30 @@ def tool_read_sheet(data: dict) -> str:
     return header + "\n" + "\n".join(recent)
 
 
+def tool_write_sheet(data: dict) -> str:
+    """Write to any cell/range in the Google Sheet."""
+    range_str = data["range"]
+    values = data["values"]
+    reason = data["reason"]
+    values_json = json.dumps(values)
+    result = _run_gog([
+        "sheets", "update", SHEET_ID, range_str,
+        "--values-json", values_json,
+        "--input", "RAW",
+    ])
+    if result.startswith("ERROR"):
+        return result
+    # Verify the write landed
+    tab = range_str.split("!")[0] if "!" in range_str else range_str
+    check = _run_gog(["sheets", "get", SHEET_ID, range_str])
+    if check.startswith("ERROR"):
+        return f"Write sent but verify failed: {check}"
+    written_val = values[0][0] if values and values[0] else ""
+    if written_val in check:
+        return f"Written to {range_str} [VERIFIED]. Reason: {reason}"
+    return f"Write sent to {range_str} but could not verify value in read-back. Reason: {reason}"
+
+
 def tool_save_memory(data: dict) -> str:
     path = MEMORY_DIR / "memory.md"
     entry = data["entry"].replace("\\n", "\n").strip()
@@ -585,6 +646,7 @@ TOOL_DISPATCH = {
     "log_weight": tool_log_weight,
     "log_nutrition": tool_log_nutrition,
     "read_sheet": tool_read_sheet,
+    "write_sheet": tool_write_sheet,
     "save_memory": tool_save_memory,
     "read_memory": tool_read_memory,
     "upload_to_drive": tool_upload_to_drive,
