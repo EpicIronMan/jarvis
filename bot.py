@@ -491,16 +491,34 @@ conversations: dict[int, list] = {}
 
 
 def load_conversation_from_logs() -> list[dict]:
-    """Start fresh — no conversation reload.
+    """Reload today's conversation from log, but only user messages.
 
-    Previously this reloaded today's conversation log to survive restarts.
-    Removed because: if the AI hallucinated (e.g. wrong weight), the
-    hallucination got baked into history and repeated on every subsequent
-    message. The AI has soul.md for context, tools for fresh data, and
-    memory.md for anything the user asked to remember. It doesn't need
-    old chat history — fresh pulls are more reliable than cached responses.
+    Why not reload assistant responses: if the AI hallucinated (e.g. said
+    174.6 lbs when the sheet shows 175.3), that hallucination would get
+    baked into history and repeated forever. By only loading user messages
+    with a brief summary placeholder for assistant turns, the AI knows
+    what was discussed but re-derives all data from fresh tool calls.
     """
-    return []
+    today = _today()
+    log_file = LOG_DIR / f"{today}.jsonl"
+    conv = []
+    if not log_file.exists():
+        return conv
+    try:
+        for line in log_file.read_text().strip().split("\n"):
+            if not line:
+                continue
+            entry = json.loads(line)
+            user_msg = entry.get("user", "")
+            if user_msg:
+                conv.append({"role": "user", "content": user_msg})
+                conv.append({"role": "assistant", "content": "(responded — pull fresh data if needed)"})
+    except Exception as e:
+        log.warning("Failed to load conversation history: %s", e)
+    if len(conv) > MAX_CONVERSATION_MESSAGES:
+        conv = conv[-MAX_CONVERSATION_MESSAGES:]
+    log.info("Loaded %d user messages from today's log", len(conv) // 2)
+    return conv
 
 
 def log_conversation(user_text: str, reply: str, tool_calls: list | None = None):
