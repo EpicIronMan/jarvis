@@ -50,7 +50,7 @@ Parse it, confirm back with volume per exercise and total, wait for confirmation
 
 ## Current Routine — Bro Split (2x/week, Sunday off)
 
-- Mon/Thu: Back & Arms — Pull Ups, Lat Pull Downs, Seated Cable Rows, Reverse Pec Fly, Preacher Curls
+- Mon/Thu: Back & Arms — Pull Ups, Lat Pull Downs, Cable Rows, Reverse Pec Fly, Preacher Curls
 - Tue/Fri: Chest & Shoulders — Incline Bench Press, Single Arm Cable Raise, Cable Flies, Shoulder Press
 - Wed/Sat: Legs & Abs — Leg Press, Leg Curls, Leg Extensions, Weighted Captain Chair
 - Sunday: Off
