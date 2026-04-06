@@ -491,26 +491,16 @@ conversations: dict[int, list] = {}
 
 
 def load_conversation_from_logs() -> list[dict]:
-    """Load today's conversation history from log file. Survives restarts."""
-    today = _today()
-    log_file = LOG_DIR / f"{today}.jsonl"
-    conv = []
-    if not log_file.exists():
-        return conv
-    try:
-        for line in log_file.read_text().strip().split("\n"):
-            if not line:
-                continue
-            entry = json.loads(line)
-            conv.append({"role": "user", "content": entry.get("user", "")})
-            conv.append({"role": "assistant", "content": entry.get("assistant", "")})
-    except Exception as e:
-        log.warning("Failed to load conversation history: %s", e)
-    # Keep last MAX_CONVERSATION_MESSAGES to stay within context limits
-    if len(conv) > MAX_CONVERSATION_MESSAGES:
-        conv = conv[-MAX_CONVERSATION_MESSAGES:]
-    log.info("Loaded %d messages from today's log", len(conv))
-    return conv
+    """Start fresh — no conversation reload.
+
+    Previously this reloaded today's conversation log to survive restarts.
+    Removed because: if the AI hallucinated (e.g. wrong weight), the
+    hallucination got baked into history and repeated on every subsequent
+    message. The AI has soul.md for context, tools for fresh data, and
+    memory.md for anything the user asked to remember. It doesn't need
+    old chat history — fresh pulls are more reliable than cached responses.
+    """
+    return []
 
 
 def log_conversation(user_text: str, reply: str, tool_calls: list | None = None):
