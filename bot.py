@@ -221,11 +221,64 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "list_drive",
+            "description": (
+                "List files in a Google Drive folder. Use to browse the user's Drive and find "
+                "files (DEXA scans, blood work, photos, etc.). Returns file names, IDs, types, "
+                "and sizes. Use the file ID with download_from_drive to fetch a file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "folder_id": {
+                        "type": "string",
+                        "description": (
+                            "Google Drive folder ID to list. Omit to list the default "
+                            "fitness/uploads/ folder."
+                        ),
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "download_from_drive",
+            "description": (
+                "Download a file from Google Drive to local disk. Use the file ID from "
+                "list_drive. After downloading, use read_pdf to read PDFs with vision. "
+                "Files are cached locally — subsequent reads don't re-download. "
+                "Max file size: 20MB."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "Google Drive file ID (from list_drive results)",
+                    },
+                    "filename": {
+                        "type": "string",
+                        "description": "What to name the file locally (e.g. 'dexa_2026-04-02.pdf')",
+                    },
+                },
+                "required": ["file_id", "filename"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_pdf",
             "description": (
-                "Read a previously uploaded PDF file using AI vision. Converts PDF pages "
-                "to images and injects them into the conversation so you can see the content. "
-                "Use this to extract data from DEXA scans, blood work, or any uploaded PDF."
+                "Read a PDF file using AI vision. Converts PDF pages to images and injects "
+                "them into the conversation so you can see the content. Use this to extract "
+                "data from DEXA scans, blood work, or any PDF. The file must be in the local "
+                "uploads directory — use download_from_drive first if it's on Google Drive. "
+                "Reads 5 pages at a time by default. If you don't find what you need, call "
+                "again with the next page range (e.g. first_page=6). The result tells you "
+                "the total page count so you know how many remain."
             ),
             "parameters": {
                 "type": "object",
@@ -233,6 +286,14 @@ TOOLS = [
                     "filename": {
                         "type": "string",
                         "description": "Filename in the uploads directory (e.g. 'dexa_scan.pdf')",
+                    },
+                    "first_page": {
+                        "type": "integer",
+                        "description": "First page to read (default: 1)",
+                    },
+                    "last_page": {
+                        "type": "integer",
+                        "description": "Last page to read (default: first_page + 4, i.e. 5 pages)",
                     },
                 },
                 "required": ["filename"],
@@ -280,16 +341,28 @@ def _today() -> str:
     ).strftime("%Y-%m-%d")
 
 
-def _pdf_to_base64_images(pdf_path: str, max_pages: int = 5) -> list[str]:
-    """Convert PDF pages to base64-encoded JPEG images for AI vision."""
+def _pdf_to_base64_images(
+    pdf_path: str, first_page: int = 1, last_page: int | None = None
+) -> tuple[list[str], int]:
+    """Convert PDF pages to base64-encoded JPEG images for AI vision.
+
+    Returns (list of base64 strings, total page count in the PDF).
+    If last_page is None, converts all pages.
+    """
     from pdf2image import convert_from_path
-    images = convert_from_path(pdf_path, dpi=200, first_page=1, last_page=max_pages)
+    from pdf2image.pdf2image import pdfinfo_from_path
+    info = pdfinfo_from_path(pdf_path)
+    total_pages = info["Pages"]
+    kwargs = {"dpi": 200, "first_page": first_page}
+    if last_page is not None:
+        kwargs["last_page"] = last_page
+    images = convert_from_path(pdf_path, **kwargs)
     b64_images = []
     for img in images:
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
         b64_images.append(base64.b64encode(buf.getvalue()).decode("utf-8"))
-    return b64_images
+    return b64_images, total_pages
 
 
 def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
@@ -427,9 +500,42 @@ def tool_upload_to_drive(data: dict) -> str:
     return result
 
 
+def tool_list_drive(data: dict) -> str:
+    """List files in a Google Drive folder."""
+    folder_id = data.get("folder_id", DRIVE_UPLOADS_FOLDER)
+    result = _run_gog(["drive", "ls", "--parent", folder_id])
+    if result.startswith("ERROR"):
+        return result
+    return result
+
+
+def tool_download_from_drive(data: dict) -> str:
+    """Download a file from Google Drive to local uploads directory."""
+    file_id = data["file_id"]
+    filename = data["filename"]
+    local_path = UPLOAD_DIR / filename
+
+    # Cache: skip download if file already exists locally
+    if local_path.exists():
+        return f"File already cached locally: {local_path}"
+
+    result = _run_gog(["drive", "download", file_id, "--output", str(local_path)], timeout=60)
+    if result.startswith("ERROR"):
+        return result
+
+    # Size guardrail: reject files over 20MB
+    if local_path.exists() and local_path.stat().st_size > 20 * 1024 * 1024:
+        local_path.unlink()
+        return "ERROR: File exceeds 20MB limit. Download removed."
+
+    return f"Downloaded to {local_path} ({local_path.stat().st_size // 1024} KB)"
+
+
 def tool_read_pdf(data: dict, conversation: list[dict] | None = None) -> str:
     """Read a PDF by converting to images and injecting into conversation for AI vision."""
     filename = data["filename"]
+    first_page = data.get("first_page", 1)
+    last_page = data.get("last_page", first_page + 4)  # default: 5 pages per read
     pdf_path = UPLOAD_DIR / filename
     if not pdf_path.exists():
         # Try matching without exact case
@@ -440,17 +546,21 @@ def tool_read_pdf(data: dict, conversation: list[dict] | None = None) -> str:
         else:
             return f"ERROR: File not found: {filename}. Available files: {', '.join(f.name for f in UPLOAD_DIR.iterdir() if f.suffix.lower() == '.pdf')}"
     try:
-        b64_images = _pdf_to_base64_images(str(pdf_path))
+        b64_images, total_pages = _pdf_to_base64_images(
+            str(pdf_path), first_page=first_page, last_page=last_page,
+        )
+        pages_read = len(b64_images)
+        range_desc = f"pages {first_page}-{first_page + pages_read - 1} of {total_pages}"
         if conversation is not None:
-            # Inject images as a user message so the AI can see them
-            content_parts = [{"type": "text", "text": f"[PDF content from {filename} — {len(b64_images)} page(s):]"}]
-            for i, b64 in enumerate(b64_images):
+            content_parts = [{"type": "text", "text": f"[PDF content from {filename} — {range_desc}:]"}]
+            for b64 in b64_images:
                 content_parts.append({
                     "type": "image_url",
                     "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
                 })
             conversation.append({"role": "user", "content": content_parts})
-        return f"PDF loaded: {filename} ({len(b64_images)} page(s)). The pages are now visible to you as images above."
+        log.info("PDF read: %s (%s, %d images)", filename, range_desc, pages_read)
+        return f"PDF loaded: {filename} ({range_desc}). The pages are now visible to you as images above."
     except Exception as e:
         return f"ERROR reading PDF: {e}"
 
@@ -478,6 +588,8 @@ TOOL_DISPATCH = {
     "save_memory": tool_save_memory,
     "read_memory": tool_read_memory,
     "upload_to_drive": tool_upload_to_drive,
+    "list_drive": tool_list_drive,
+    "download_from_drive": tool_download_from_drive,
     "read_pdf": tool_read_pdf,
     "sync_fitbit": tool_sync_fitbit,
 }
@@ -680,9 +792,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # For PDFs: convert to images and send as multimodal content so AI can see them
     if filename.lower().endswith(".pdf"):
         try:
-            b64_images = _pdf_to_base64_images(str(local_path))
+            b64_images, total_pages = _pdf_to_base64_images(str(local_path), first_page=1, last_page=5)
+            remaining = total_pages - len(b64_images)
+            remaining_note = f" ({remaining} more pages available — use read_pdf to continue)" if remaining > 0 else ""
             content_parts = [
-                {"type": "text", "text": f"[PDF uploaded: {filename} saved to {local_path} — {len(b64_images)} page(s)] {caption}".strip()},
+                {"type": "text", "text": f"[PDF uploaded: {filename} saved to {local_path} — showing pages 1-{len(b64_images)} of {total_pages}{remaining_note}] {caption}".strip()},
             ]
             for b64 in b64_images:
                 content_parts.append({
