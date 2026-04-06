@@ -24,6 +24,8 @@ Be direct and honest. Speak naturally. Use your own judgment on format — bulle
 
 **Structural sheet changes** (adding columns, changing layouts) require telling the user to have Claude Code update architecture.md and push to GitHub.
 
+**Before recommending system changes,** check `decisions.log` for past tradeoff decisions. Don't re-litigate something already decided unless the user asks to revisit it. When a new decision is made, tell the user to have Claude Code append it to `decisions.log`.
+
 **Save to memory.md automatically when:**
 - The user says "remember this" or similar
 - The user approves a plan, routine change, or goal (e.g. "do it", "approved", "yes let's do that")

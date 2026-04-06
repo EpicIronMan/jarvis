@@ -2,6 +2,7 @@
 # Daily QA check — runs via cron, alerts the user only if unresolved issues found.
 # Zero tokens. Pure bash. Checks data integrity, procedures, and architecture.
 # Skips issues that match entries in resolved.jsonl.
+# Hit tracking: each flag_issue call logs to qa-hits.jsonl for monthly audit.
 
 set -euo pipefail
 
@@ -14,8 +15,9 @@ SHEET_ID="${SHEET_ID}"
 REPO_DIR="/home/openclaw/lifeos"
 LOG_DIR="$REPO_DIR/logs"
 RESOLVED_FILE="$REPO_DIR/resolved.jsonl"
-TODAY=$(TZ=America/Toronto date +%Y-%m-%d)
-YESTERDAY=$(TZ=America/Toronto date -d "yesterday" +%Y-%m-%d)
+HITS_FILE="$REPO_DIR/qa-hits.jsonl"
+TODAY=$(date +%Y-%m-%d)
+YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
 ISSUES=""
 
 export HOME=/home/openclaw
@@ -32,9 +34,11 @@ is_resolved() {
 }
 
 # --- Helper: add an issue only if not resolved ---
+# Also logs every hit (resolved or not) to qa-hits.jsonl for monthly audit.
 flag_issue() {
     local key="$1"
     local msg="$2"
+    echo "{\"date\":\"$TODAY\",\"key\":\"$key\",\"msg\":\"$msg\"}" >> "$HITS_FILE"
     if ! is_resolved "$key"; then
         ISSUES="${ISSUES}\n- $msg"
     fi
@@ -47,7 +51,7 @@ fi
 
 # --- Check 2: Tool verification failures in today's log ---
 if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
-    FAILS=$(grep -c "VERIFY FAILED" "$LOG_DIR/$TODAY.jsonl" 2>/dev/null || echo "0")
+    FAILS=$(grep -c "VERIFY FAILED" "$LOG_DIR/$TODAY.jsonl" 2>/dev/null || true)
     if [ "$FAILS" -gt 0 ]; then
         flag_issue "verify_failed_$TODAY" "$FAILS tool verification failures today"
     fi
@@ -56,14 +60,14 @@ fi
 # --- Check 3: Yesterday's training log exists (unless Sunday off) ---
 YESTERDAY_DOW=$(TZ=America/Toronto date -d "yesterday" +%A)
 if [ "$YESTERDAY_DOW" != "Sunday" ]; then
-    TRAINING=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Training Log!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null | grep -c "$YESTERDAY" || echo "0")
+    TRAINING=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Training Log!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null | grep -c "$YESTERDAY" || true)
     if [ "$TRAINING" -eq 0 ]; then
         flag_issue "no_training_$YESTERDAY" "No training logged for yesterday ($YESTERDAY, $YESTERDAY_DOW)"
     fi
 fi
 
 # --- Check 4: Yesterday's nutrition exists ---
-NUTRITION=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Nutrition!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null | grep -c "$YESTERDAY" || echo "0")
+NUTRITION=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Nutrition!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null | grep -c "$YESTERDAY" || true)
 if [ "$NUTRITION" -eq 0 ]; then
     flag_issue "no_nutrition_$YESTERDAY" "No nutrition logged for yesterday ($YESTERDAY)"
 fi
@@ -94,14 +98,14 @@ if [ -f "$YESTERDAY_LOG" ]; then
         fi
     fi
 
-    SAVE_CLAIMS=$(grep -o '"save_memory"' "$YESTERDAY_LOG" 2>/dev/null | wc -l || echo "0")
-    SAVE_PROMISES=$(grep -oi 'update.*changelog\|save.*to.*memory\|update.*memory' "$YESTERDAY_LOG" 2>/dev/null | wc -l || echo "0")
+    SAVE_CLAIMS=$(grep -o '"save_memory"' "$YESTERDAY_LOG" 2>/dev/null | wc -l || true)
+    SAVE_PROMISES=$(grep -oi 'update.*changelog\|save.*to.*memory\|update.*memory' "$YESTERDAY_LOG" 2>/dev/null | wc -l || true)
     if [ "$SAVE_PROMISES" -gt "$SAVE_CLAIMS" ] && [ "$SAVE_CLAIMS" -gt 0 ]; then
         flag_issue "hallucinated_saves_$YESTERDAY" "Procedure: Bot promised more saves than executed ($SAVE_PROMISES claimed, $SAVE_CLAIMS done)"
     fi
 
     if grep -qi "how did I do\|status report\|my stats\|morning report" "$YESTERDAY_LOG" 2>/dev/null; then
-        TABS_READ=$(grep -o '"tab"[[:space:]]*:[[:space:]]*"[^"]*"' "$YESTERDAY_LOG" 2>/dev/null | sort -u | wc -l || echo "0")
+        TABS_READ=$(grep -o '"tab"[[:space:]]*:[[:space:]]*"[^"]*"' "$YESTERDAY_LOG" 2>/dev/null | sort -u | wc -l || true)
         if [ "$TABS_READ" -lt 3 ]; then
             flag_issue "incomplete_report_$YESTERDAY" "Procedure: Status report only read $TABS_READ sheet tabs (expected 3+)"
         fi
@@ -129,7 +133,7 @@ for f in "$REPO_DIR"/memory/*.md; do
     age_days=$(( ($(date +%s) - $(stat -c %Y "$f")) / 86400 ))
     if [ "$age_days" -gt 30 ]; then
         # Check if any log in last 7 days references this file
-        recent_use=$(grep -rl "$fname" "$LOG_DIR"/ 2>/dev/null | tail -7 | wc -l || echo "0")
+        recent_use=$(grep -rl "$fname" "$LOG_DIR"/ 2>/dev/null | tail -7 | wc -l || true)
         if [ "$recent_use" -eq 0 ]; then
             flag_issue "stale_memory_$fname" "Orphan: memory/$fname not modified in ${age_days}d and not referenced in recent logs"
         fi
@@ -137,20 +141,98 @@ for f in "$REPO_DIR"/memory/*.md; do
 done
 
 # --- Check 10: Architecture drift ---
-for f in bot.py soul.md morning-brief.sh architecture.md procedures.md qa-check.sh auto-commit.sh; do
+for f in bot.py soul.md morning-brief-ai.py architecture.md procedures.md qa-check.sh auto-commit.sh; do
     if [ ! -f "$REPO_DIR/$f" ]; then
         flag_issue "missing_file_$f" "Architecture: Missing expected file $f"
     fi
 done
 
-# --- Check 10: Git repo health ---
+# --- Check 11: Git repo health (retry once if index.lock exists) ---
 cd "$REPO_DIR"
+if [ -f .git/index.lock ]; then
+    sleep 5
+fi
 if ! git status --porcelain > /dev/null 2>&1; then
     flag_issue "git_broken" "Architecture: Git repo broken or missing"
 else
-    UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l || echo "0")
+    UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l || true)
     if [ "$UNCOMMITTED" -gt 20 ]; then
         flag_issue "git_uncommitted" "Architecture: $UNCOMMITTED uncommitted changes (auto-commit may be failing)"
+    fi
+fi
+
+# --- Check 12: Morning brief delivered today ---
+BRIEF_LOG="$REPO_DIR/morning-brief.log"
+if [ -f "$BRIEF_LOG" ]; then
+    # Log appends "Morning brief sent (Nnn chars)" on success
+    BRIEF_SENT=$(tail -1 "$BRIEF_LOG" 2>/dev/null | grep -c "Morning brief sent" || true)
+    if [ "$BRIEF_SENT" -eq 0 ]; then
+        flag_issue "brief_not_sent" "Morning brief did not send today (check morning-brief.log)"
+    fi
+else
+    flag_issue "brief_no_log" "Morning brief log missing entirely"
+fi
+
+# --- Check 13: Disk space ---
+DISK_PCT=$(df / --output=pcent | tail -1 | tr -d ' %')
+if [ "$DISK_PCT" -gt 85 ]; then
+    flag_issue "disk_high" "Disk usage at ${DISK_PCT}% (threshold 85%)"
+fi
+
+# --- Check 14: Memory (RAM) ---
+MEM_PCT=$(free | awk '/Mem:/ {printf "%.0f", $3/$2 * 100}')
+if [ "$MEM_PCT" -gt 85 ]; then
+    flag_issue "ram_high" "RAM usage at ${MEM_PCT}% (threshold 85%)"
+fi
+
+# --- Check 15: Fitbit data freshness (not just timer running) ---
+RECOVERY_LATEST=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Recovery!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null \
+    | grep -oP '^\d{4}-\d{2}-\d{2}' | sort | tail -1 || true)
+if [ -n "$RECOVERY_LATEST" ]; then
+    RECOVERY_AGE=$(( ($(date +%s) - $(date -d "$RECOVERY_LATEST" +%s)) / 86400 ))
+    if [ "$RECOVERY_AGE" -gt 2 ]; then
+        flag_issue "fitbit_stale" "Fitbit data stale: last Recovery entry is $RECOVERY_LATEST (${RECOVERY_AGE}d ago)"
+    fi
+else
+    flag_issue "fitbit_no_data" "Could not read Recovery tab — Fitbit data may be missing"
+fi
+
+# --- Check 16: Google Sheets auth health ---
+GOG_TEST=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Body Metrics!A1:A1" --account "$GOG_ACCT" --no-input 2>&1 || true)
+if echo "$GOG_TEST" | grep -qi "token\|auth\|expired\|error\|no TTY"; then
+    flag_issue "gog_auth_broken" "Google Sheets auth may be broken: $(echo "$GOG_TEST" | head -1)"
+fi
+
+# --- Check 17: Caddy web server health ---
+if systemctl is-active --quiet caddy; then
+    CADDY_RESP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost 2>/dev/null || echo "000")
+    if [ "$CADDY_RESP" = "000" ]; then
+        flag_issue "caddy_no_response" "Caddy running but not responding on localhost"
+    fi
+else
+    flag_issue "caddy_down" "Caddy service is not running"
+fi
+
+# --- Check 18: Sleep data freshness ---
+SLEEP_LATEST=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Recovery!A:B" --account "$GOG_ACCT" --no-input 2>/dev/null \
+    | grep -P '^\d{4}-\d{2}-\d{2}\s+\d' | tail -1 | awk '{print $1}' || true)
+if [ -n "$SLEEP_LATEST" ]; then
+    SLEEP_AGE=$(( ($(date +%s) - $(date -d "$SLEEP_LATEST" +%s)) / 86400 ))
+    if [ "$SLEEP_AGE" -gt 2 ]; then
+        flag_issue "sleep_stale" "Sleep data stale: last scored night is $SLEEP_LATEST (${SLEEP_AGE}d ago) — ring/watch may not be worn"
+    fi
+fi
+
+# --- Check 19: Git remote reachable ---
+cd "$REPO_DIR"
+if ! git ls-remote --exit-code origin HEAD > /dev/null 2>&1; then
+    # Check if pushes have been silently failing
+    LOCAL_HEAD=$(git rev-parse HEAD 2>/dev/null || true)
+    REMOTE_HEAD=$(git ls-remote origin HEAD 2>/dev/null | awk '{print $1}' || true)
+    if [ -n "$LOCAL_HEAD" ] && [ -n "$REMOTE_HEAD" ] && [ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]; then
+        flag_issue "git_remote_behind" "Git remote is behind local — pushes may be failing"
+    elif [ -z "$REMOTE_HEAD" ]; then
+        flag_issue "git_remote_unreachable" "Cannot reach git remote — backup is not updating"
     fi
 fi
 

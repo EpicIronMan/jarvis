@@ -1,0 +1,16 @@
+# Decision Log
+# Format: Date | Topic | Options considered | Chosen | Why
+# Append-only. One entry per significant decision. Monthly audit reviews.
+# --------------------------------------------------------------------------
+
+2026-04-05 | AI model selection | Claude Sonnet ($12/mo) vs Grok 4.1 Fast ($0.50/mo) | Grok 4.1 Fast | OpenClaw sandbox was the root cause of failures, not the model. 24x cost savings with same quality once sandbox removed.
+
+2026-04-05 | Bot architecture | Keep OpenClaw (Node+Docker+sandbox) vs single Python file | Single Python file (bot.py) | OpenClaw sandbox had unfixable ModuleNotFoundError. Docker/gateway/container abstraction was unnecessary for single-user bot. Simpler = more reliable.
+
+2026-04-06 | AI model upgrade | Stay on Grok 4.1 Fast ($0.50/mo) vs upgrade to Grok 4.20 (higher cost) | Grok 4.20 | Hallucination concerns with cheaper model. Integrity > efficiency — wrong data is worse than higher cost. Cost impact needs monitoring.
+
+2026-04-06 | Cron timezone fix | (A) Hardcode UTC offsets in cron (simple, DST breaks) vs (B) Set system TZ to America/Toronto (affects all processes) vs (C) TZ-aware wrapper script | (B) System TZ | Single-user LifeOS box, not shared infra. All 4 cron jobs benefit. Logs in ET is actually preferable. Reliability > efficiency.
+
+2026-04-06 | QA check expansion | Keep 11 checks vs expand to 19 | Expand to 19 | Added morning brief delivery, disk, RAM, Fitbit freshness, Google auth, Caddy, sleep freshness, git remote. All silent failure modes. Added hit tracking so monthly audit can assess which checks earn their keep.
+
+2026-04-06 | Decision capture | (A) Append-only decisions.log vs (B) Per-file decisions/ dir vs (C) Expand architecture.md vs (D) JSONL | (A) decisions.log | Low friction, human+AI readable, grep-able. Architecture.md captures what changed; this captures why-this-over-that. Monthly audit counts entries to flag months with no reasoning recorded.

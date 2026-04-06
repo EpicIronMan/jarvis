@@ -136,6 +136,8 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- qa-check.sh                     # Daily integrity + procedure compliance check
 |-- resolve.sh                      # CLI tool to mark QA issues as resolved
 |-- resolved.jsonl                  # Log of resolved QA issues (checked before alerting)
+|-- decisions.log                   # Append-only decision log (why-this-over-that)
+|-- qa-hits.jsonl                   # QA check hit tracking (fed into monthly audit)
 |-- auto-commit.sh                  # Hourly git commit + push to GitHub
 |-- lifeos-bot.service              # systemd unit file (canonical copy)
 |-- requirements.txt                # Python deps: openai, python-telegram-bot
@@ -180,7 +182,7 @@ The entire application. ~400 lines of Python that:
 **Dependencies:** `openai`, `python-telegram-bot`, `pdf2image`, `Pillow`
 **System dependency:** `poppler-utils` (for PDF→image conversion)
 **Runs as:** systemd service `lifeos-bot` under user `openclaw`
-**Cost:** ~$0.50/month (Grok 4.1 Fast: $0.20/MTok in, $0.50/MTok out)
+**Cost:** TBD — currently running Grok 4.20 (switched from Grok 4.1 Fast due to hallucination concerns). Pricing needs verification.
 
 ### 2. Morning Brief Cron (`morning-brief.sh`)
 
@@ -329,20 +331,33 @@ Every conversation log entry includes a `tools` array showing exactly which tool
 
 `qa-check.sh` runs daily and checks:
 
-| Check | What it catches | Why it matters |
-|-------|----------------|----------------|
-| Conversation log exists | Bot may be down or not receiving messages | Catches service outages |
-| No `[VERIFY FAILED]` in logs | Writes that didn't land | Catches silent data loss |
-| Yesterday's training logged | Missed workout logging | Data completeness |
-| Yesterday's nutrition logged | Missed nutrition logging | Data completeness |
-| Weight in last 3 days | Scale sync may be broken | Catches Fitbit/Renpho issues |
-| Bot service running | Bot crashed | Catches service failures |
-| Fitbit timer active | Fitbit sync may have stopped | Catches pipeline failures |
-| Bot read Body Scans for BF% | Bot used wrong data source | Catches procedure violations |
-| Save promises match tool calls | Bot hallucinated file saves | Catches hallucinations |
-| Status reports read 3+ tabs | Bot gave incomplete report | Catches lazy data pulls |
-| All expected files exist | Someone deleted a key file | Catches architecture drift |
-| Git repo healthy | Auto-commit may be broken | Catches backup failures |
+| # | Check | What it catches | Why it matters |
+|---|-------|----------------|----------------|
+| 1 | Conversation log exists | Bot may be down or not receiving messages | Catches service outages |
+| 2 | No `[VERIFY FAILED]` in logs | Writes that didn't land | Catches silent data loss |
+| 3 | Yesterday's training logged | Missed workout logging (skips Sunday) | Data completeness |
+| 4 | Yesterday's nutrition logged | Missed nutrition logging | Data completeness |
+| 5 | Weight in last 3 days | Scale sync may be broken | Catches Fitbit/Renpho issues |
+| 6 | Bot service running | Bot crashed | Catches service failures |
+| 7 | Fitbit timer active | Fitbit sync may have stopped | Catches pipeline failures |
+| 8a | Bot read Body Scans for BF% | Bot used wrong data source | Catches procedure violations |
+| 8b | Save promises match tool calls | Bot hallucinated file saves | Catches hallucinations |
+| 8c | Status reports read 3+ tabs | Bot gave incomplete report | Catches lazy data pulls |
+| 9a | Empty directories | Orphaned folders from old features | Orphan detection |
+| 9b | Old openclaw service enabled | Forgotten service still running | Orphan detection |
+| 9c | Stale memory files (30d+) | Dead memory no one references | Orphan detection |
+| 10 | Expected files exist | Core file accidentally deleted | Architecture drift |
+| 11 | Git repo healthy | Repo broken or auto-commit failing | Backup integrity |
+| 12 | Morning brief delivered | Cron ran but AI/Telegram failed | Silent delivery failure |
+| 13 | Disk space (<85%) | Box filling up | Infrastructure health |
+| 14 | RAM usage (<85%) | OOM risk | Infrastructure health |
+| 15 | Fitbit data freshness (2d) | Timer runs but sync silently fails | Data pipeline health |
+| 16 | Google Sheets auth | gog token expired | Data pipeline health |
+| 17 | Caddy web server | Web endpoint down or unresponsive | Infrastructure health |
+| 18 | Sleep data freshness (2d) | Ring/watch not worn, stale recovery data | Data completeness |
+| 19 | Git remote reachable | Pushes silently failing, no backup | Backup integrity |
+
+All hits are logged to `qa-hits.jsonl` for the monthly effectiveness audit.
 
 **Why procedure checks:** The bot should follow specific tool call patterns (defined in `procedures.md`). Example: when discussing body fat, it MUST read the Body Scans tab (DEXA data), NOT the Body Metrics tab (Renpho data). The QA catches when it takes shortcuts.
 
@@ -457,4 +472,10 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-05:** Rebranded to J.A.R.V.I.S., scrubbed all personal info, squashed git history, pushed to GitHub (public). **Why:** Open source for community review. Personal info (email, IDs, keys) stays in env file only.
 - **2026-04-05:** Consolidated into single git repo with hourly auto-commit + auto-push to GitHub. **Why:** Full audit trail. Any AI can run `git log` to see every change and why it was made.
 - **2026-04-06:** Added PDF vision reading + Google Drive browsing. PDFs are converted to page images (pdf2image + poppler) and sent as multimodal vision content to the AI. Reads 5 pages at a time — if the AI needs more, it calls `read_pdf` again with the next page range (uses the existing tool loop). Also added `list_drive` and `download_from_drive` tools so the bot can browse any Google Drive folder and read files it finds (DEXA scans, blood work, etc.) without the user re-uploading. Files are cached locally after first download. 20MB size guard on downloads. **Why:** The bot claimed to "extract" DEXA data from PDFs but couldn't — it only saved the file path. Text extraction (pdfplumber) would be cheaper but less reliable for formatted reports with tables/graphics. Vision is more accurate (integrity > efficiency). Drive browsing lets the bot read old files and files the user drops into any Drive folder manually. New deps: `pdf2image`, `Pillow`, `poppler-utils`.
+- **2026-04-06:** System timezone set to America/Toronto (was UTC). **Why:** `CRON_TZ` variable was silently ignored by Vixie Cron — morning brief was firing at 7am UTC (3am ET) instead of 7am ET. Removed now-unnecessary `CRON_TZ` lines from crontab. All cron jobs (morning-brief, auto-commit, qa-check, monthly-audit) now run in ET natively.
+- **2026-04-06:** Fixed `grep -c || echo "0"` bug in qa-check.sh. **Why:** `grep -c` outputs "0" AND exits non-zero on no-match, so `|| echo "0"` appended a second "0", producing "0\n0" which broke integer comparisons. Changed to `|| true`. Also added index.lock retry for git health check to avoid false alarms from auto-commit race conditions.
+- **2026-04-06:** Switched AI model from Grok 4.1 Fast to Grok 4.20. **Why:** Hallucination concerns with the cheaper model. Cost impact needs monitoring — 4.1 Fast was ~$0.50/mo, 4.20 pricing TBD but significantly higher based on $2-3 spend in first 2 days.
+- **2026-04-06:** Expanded QA from 11 to 19 checks. Added: morning brief delivery (12), disk space (13), RAM (14), Fitbit data freshness (15), Google Sheets auth (16), Caddy health (17), sleep data freshness (18), git remote reachable (19). **Why:** These are all failure modes that break silently — you wouldn't know until you noticed stale data or a missing brief. Also added hit tracking (`qa-hits.jsonl`) so the monthly audit can report which checks fire often (valuable) vs never (candidates for removal).
+- **2026-04-06:** Added decisions.log — append-only decision log capturing options considered, what was chosen, and why. **Why:** architecture.md changelog captures *what* changed; decisions.log captures *why this over that*. Backfilled key decisions from 2026-04-05 and 2026-04-06. Monthly audit counts entries.
+- **2026-04-06:** Added QA effectiveness audit to monthly-audit.sh. **Why:** QA checks should be audited too — if a check never fires in 3 months, it's either perfectly reliable (good) or the check is broken (bad). Monthly review surfaces this. Includes recommendation notes for checks flagged as potentially low-value (9a, 9b, 8b).
 - **2026-04-05:** Orphan cleanup. Removed: old `/home/openclaw/lifeos-bot/` directory (stale duplicate), Docker sandbox container + images (99MB, OpenClaw only), OpenClaw directories (agents, canvas, cron, devices, identity, logs, media, sandbox, tasks, telegram, credentials), stale workspace files (old SOUL.md, CHANGELOG.md, etc.). Kept: `.openclaw/workspace/homebrew/` (gog binary), `.openclaw/workspace/.config/gogcli/` (Google auth). **Why:** ~100MB of dead weight serving no purpose. **QA approach:** Snapshot all service states before cleanup → clean → verify same services still respond → send Telegram confirmation.
