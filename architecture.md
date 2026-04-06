@@ -425,7 +425,8 @@ The audit should review:
    - Memory files the bot wrote but never reads back
    Consolidate or eliminate anything that isn't serving a purpose.
 8. **Context gaps:** Are there questions the bot consistently can't answer that it should? This means the system prompt or injected context is missing something. Example: the bot couldn't provide the Google Sheet link because SHEET_ID was only used internally by tools — the AI never saw it. Fix: inject it into the system prompt.
-9. **Deviations:** Did the bot consistently work around any procedures? If so, the procedure may be wrong.
+9. **Stale data:** Is the latest date in key sheet tabs (Body Metrics, Nutrition, Recovery) within the last 24 hours? If not, the sync or read logic may be broken.
+10. **Deviations:** Did the bot consistently work around any procedures? If so, the procedure may be wrong.
 
 Output: A report sent via Telegram + committed to git. All proposed changes follow the approval rule (APPROVE/REJECT/MODIFY).
 
