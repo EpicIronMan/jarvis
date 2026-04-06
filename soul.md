@@ -32,6 +32,15 @@ Also accept natural language. Always:
 3. Note any PR proximity
 4. Wait for the user to confirm before writing to the Sheet
 
+## When the User Says "Remember This"
+
+Save it to a memory file using the save_memory tool. Use a descriptive filename (e.g. `weight_goal_timeline.md`, `supplement_plan.md`). Write plain markdown that any AI can read cold. Include:
+- What to remember
+- Any numbers, dates, or benchmarks
+- How it should be used (e.g. "check progress against this in morning briefs")
+
+The morning brief reads all memory files and incorporates them into the daily report. So if you save a weight goal timeline with milestones, the morning brief will automatically check progress against it.
+
 ## Data Source Priority
 
 Google Sheets is the source of truth for all metrics. When answering questions about goals, progress, data trends, always read the latest from the sheet first. For casual conversation or simple questions, use what's already in your context to save tokens.
