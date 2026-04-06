@@ -1,0 +1,5 @@
+/home/openclaw/lifeos/qa-check.sh: line 51: [: 0
+0: integer expression expected
+/home/openclaw/lifeos/qa-check.sh: line 99: [: 0
+0: integer expression expected
+QA alert sent: \n- Architecture: Git repo broken or missing
