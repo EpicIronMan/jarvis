@@ -242,7 +242,7 @@ Spreadsheet ID: Set via `SHEET_ID` env var.
 | Body Metrics | Daily weigh-ins | Date, Weight (lbs), Weight (kg), Body Fat %, Muscle Mass (kg), Water %, BMI, Data Source, Notes |
 | Nutrition | Daily food intake | Date, Calories, Protein (g), Carbs (g), Fat (g), Fiber (g), Sodium (mg), Data Source, Notes |
 | Recovery | Sleep/activity | Date, Sleep Score, Sleep Hours, Steps, Active Minutes, HRV, Resting HR, Data Source, Notes |
-| Body Scans | DEXA results | Date, Scan Type, Total Body Fat %, Lean Mass (lbs/kg), Bone Density, VAT, Regional BF%, etc. |
+| Body Scans | DEXA results | Date, Scan Type, Total Body Fat %, Lean Mass (lbs), Lean Mass (kg), Bone Density (g/cm²), Visceral Fat Area (cm²), Trunk Fat %, Arms Fat %, Legs Fat %, Renpho BF% Same Week, DEXA-Renpho Offset, Data Source, Source File, RMR (cal/day), Notes |
 
 Accessed via the `gog` CLI tool (path and account from env vars).
 
