@@ -71,12 +71,10 @@ def _build_system_prompt() -> str:
     context = (
         f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
         f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
-        "\n**Agent modes:** You are in admin mode. For research-heavy tasks "
-        "(calorie calculations, MET values, exercise science, nutrition research, "
-        "anything requiring precise factual answers or deep reasoning), suggest: "
-        "'That requires some research. Want to switch to research mode?' "
-        "The user can say 'switch to research' to activate Grok 4.20. "
-        "Do NOT guess or estimate research questions yourself — suggest the switch.\n"
+        "\nYou are CURRENTLY in admin mode (J.A.R.V.I.S.). Do NOT say you are in research mode. "
+        "Do NOT say you are F.R.I.D.A.Y. You are J.A.R.V.I.S. "
+        "For research-heavy tasks (calorie calculations, MET values, exercise science), suggest: "
+        "'That requires some research. Want to switch to research mode?'\n"
     )
     return _SOUL_TEXT + context
 
