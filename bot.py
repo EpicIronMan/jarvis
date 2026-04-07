@@ -54,6 +54,16 @@ RESEARCH_MODEL = os.environ.get("RESEARCH_MODEL", "grok-4.20-0309-reasoning")
 MAX_TOOL_ROUNDS = int(os.environ.get("MAX_TOOL_ROUNDS", "10"))
 MAX_CONVERSATION_MESSAGES = int(os.environ.get("MAX_CONVERSATION_MESSAGES", "200"))
 
+# Agent identity config — change names/keywords here, everything else follows
+ADMIN_AGENT_NAME = os.environ.get("ADMIN_AGENT_NAME", "J.A.R.V.I.S.")
+ADMIN_EMOJI = "🤖"
+ADMIN_SWITCH_KEYWORDS = [kw.strip().lower() for kw in
+    os.environ.get("ADMIN_SWITCH_KEYWORDS", "admin,jarvis").split(",")]
+RESEARCH_AGENT_NAME = os.environ.get("RESEARCH_AGENT_NAME", "F.R.I.D.A.Y.")
+RESEARCH_EMOJI = "🤖🔬"
+RESEARCH_SWITCH_KEYWORDS = [kw.strip().lower() for kw in
+    os.environ.get("RESEARCH_SWITCH_KEYWORDS", "research,friday,grok").split(",")]
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -71,10 +81,11 @@ def _build_system_prompt() -> str:
     context = (
         f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
         f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
-        "\nYou are CURRENTLY in admin mode (J.A.R.V.I.S.). Do NOT say you are in research mode. "
-        "Do NOT say you are F.R.I.D.A.Y. You are J.A.R.V.I.S. "
-        "For research-heavy tasks (calorie calculations, MET values, exercise science), suggest: "
-        "'That requires some research. Want to switch to research mode?'\n"
+        f"\nYou are CURRENTLY in admin mode ({ADMIN_AGENT_NAME}). Do NOT say you are {RESEARCH_AGENT_NAME}. "
+        "CRITICAL: You CANNOT switch modes — only the system can. Never say 'Research mode activated' "
+        "or 'Switching to research mode'. For research-heavy tasks (calorie calculations, MET values, "
+        "exercise science), say ONLY: 'That requires some research. Want to switch to research mode?' "
+        "and STOP — do not attempt to answer the research question yourself.\n"
     )
     return _SOUL_TEXT + context
 
@@ -813,7 +824,10 @@ def _clean_content(reply: str) -> str:
     import re
     # Strip agent name/emoji prefixes the model might add
     reply = re.sub(r'^(?:🤖🔬|🤖|🔬)\s*\n?', '', reply).lstrip()
-    reply = re.sub(r'^(?:J\.A\.R\.V\.I\.S\.|F\.R\.I\.D\.A\.Y\.)\s*>?\s*\n?', '', reply, flags=re.IGNORECASE).lstrip()
+    # Build pattern from configured agent names (escape dots for regex)
+    _admin_re = re.escape(ADMIN_AGENT_NAME).replace(r'\.', r'\.')
+    _research_re = re.escape(RESEARCH_AGENT_NAME).replace(r'\.', r'\.')
+    reply = re.sub(rf'^(?:{_admin_re}|{_research_re})\s*>?\s*\n?', '', reply, flags=re.IGNORECASE).lstrip()
     # Convert ### Header → *Header* (bold)
     reply = re.sub(r'^#{1,4}\s+(.+)$', r'*\1*', reply, flags=re.MULTILINE)
     # Convert ***text*** → *text*
@@ -842,6 +856,52 @@ def _escape_markdownv2(reply: str) -> str:
     return reply
 
 
+def _detect_mode_switch(user_text: str, current_mode: str, suggested_research: bool) -> str | None:
+    """Detect if user wants to switch modes. Returns 'admin', 'research', or None.
+
+    Handles typos (reseerch, reserch), conflicting keywords (go back to research),
+    and confirmation words after research was suggested.
+    """
+    import re
+    t = user_text.strip().lower()
+
+    # Bare toggle commands
+    if t in ("switch", "switch back", "switch mode"):
+        return "admin" if current_mode == "research" else "research"
+    if t == "back":
+        return "admin"
+
+    # Confirmation → switch to research if it was suggested
+    if suggested_research:
+        confirm_starts = ("yes", "yeah", "yep", "sure", "ok", "okay", "do it",
+                          "go ahead", "please", "pls", "plz")
+        if any(t == w or t.startswith(w + " ") or t.startswith(w + ",") for w in confirm_starts):
+            return "research"
+
+    # Fuzzy keyword matching — built from config keywords
+    # "research" with common typos: reseerch, reserch, researh, reaserch
+    _research_kws = "|".join(re.escape(kw) for kw in RESEARCH_SWITCH_KEYWORDS)
+    research_hit = bool(re.search(rf'res\w{{0,4}}r?ch|{_research_kws}', t))
+    _admin_kws = "|".join(re.escape(kw) for kw in ADMIN_SWITCH_KEYWORDS)
+    admin_hit = bool(re.search(rf'\b(?:{_admin_kws})\b', t))
+
+    # Require a mode-switch phrase to avoid triggering on casual mentions
+    mode_phrase = bool(re.search(
+        r'\bswitch\b|\bmode\b|\bgo\s+(?:to|back)\b|\bback\s+to\b'
+        r'|\btalk\s+to\b|\blet\s+me\b|\bactivate\b|\bcan\s+(?:we|i)\s+get\b',
+        t
+    ))
+
+    if mode_phrase:
+        # Research takes priority — "go back to research" means research, not admin
+        if research_hit:
+            return "research"
+        if admin_hit:
+            return "admin"
+
+    return None
+
+
 def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = None) -> str:
     fn = TOOL_DISPATCH.get(name)
     if not fn:
@@ -868,29 +928,96 @@ def _research_system_prompt() -> str:
     from zoneinfo import ZoneInfo
     now = datetime.datetime.now(ZoneInfo("America/Toronto"))
     return (
-        "You are F.R.I.D.A.Y. — the research agent in LifeOS. "
-        "J.A.R.V.I.S. (admin mode) handles daily operations. You handle deep reasoning. "
-        "You have access to the same tools as J.A.R.V.I.S. "
-        "Do NOT include your name or any header like 'F.R.I.D.A.Y. >' in your responses — the system adds an emoji identifier automatically. "
+        f"You are {RESEARCH_AGENT_NAME} — the research agent in LifeOS. You are NOT {ADMIN_AGENT_NAME}. "
+        f"Never say '{ADMIN_AGENT_NAME} here' or identify yourself as {ADMIN_AGENT_NAME}. "
+        f"{ADMIN_AGENT_NAME} (admin mode) handles daily operations. You handle deep reasoning. "
+        f"You have access to the same tools as {ADMIN_AGENT_NAME}. "
+        f"Do NOT include your name or any header like '{RESEARCH_AGENT_NAME} >' in your responses — the system adds an emoji identifier automatically. "
+        "IMPORTANT: Focus on the user's MOST RECENT question. Do NOT revisit older resolved topics. "
         "Your job: factual research, precise calculations (calories, MET, exercise science, nutrition). "
         "Show your math. Cite sources when possible. Be thorough but concise. "
         "Do not use ### headers or *** formatting — use **bold** only. "
-        "You have full conversation context from J.A.R.V.I.S. "
+        f"You have full conversation context from {ADMIN_AGENT_NAME}. "
         "When you're done with the research task, tell the user: "
-        "'Research complete. Say **switch back** to return to J.A.R.V.I.S.'\n"
+        f"'Research complete. Say **switch back** to return to {ADMIN_AGENT_NAME}.'\n"
         f"\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
         f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
     )
 
 
-def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admin") -> tuple[str, list]:
+def _filter_conversation(conversation: list[dict], mode: str) -> list[dict]:
+    """Build a filtered conversation for the API — each agent only sees its own responses.
+
+    - User messages: always included as-is (role: user)
+    - Same-mode assistant messages: included as role: assistant (model sees them as its own)
+    - Cross-mode assistant messages: re-labeled as role: user with agent prefix
+    - Tool messages: included only if they belong to the current mode's tool calls
+    - Handoff prompts (_handoff=True): stripped entirely
+    """
+    other_agent = RESEARCH_AGENT_NAME if mode == "admin" else ADMIN_AGENT_NAME
+    filtered = []
+    # Track which tool_call_ids belong to the current mode
+    current_mode_tc_ids = set()
+
+    for msg in conversation:
+        # Skip handoff prompts
+        if msg.get("_handoff"):
+            continue
+
+        role = msg.get("role")
+        msg_mode = msg.get("_mode")
+
+        if role == "user":
+            # User messages always pass through, without internal metadata
+            clean = {"role": "user", "content": msg["content"]}
+            filtered.append(clean)
+
+        elif role == "assistant":
+            if msg_mode == mode or msg_mode is None:
+                # Same mode — include as assistant (model's own words)
+                clean = {"role": "assistant", "content": msg.get("content", "")}
+                if msg.get("tool_calls"):
+                    clean["tool_calls"] = msg["tool_calls"]
+                    for tc in msg["tool_calls"]:
+                        current_mode_tc_ids.add(tc["id"])
+                filtered.append(clean)
+            else:
+                # Cross-mode — re-label as user message with agent prefix
+                content = msg.get("content", "")
+                if content:
+                    filtered.append({
+                        "role": "user",
+                        "content": f"[{other_agent} said]: {content}",
+                    })
+                # Drop cross-mode tool_calls — they'd confuse the model
+
+        elif role == "tool":
+            # Only include tool results for same-mode tool calls
+            tc_id = msg.get("tool_call_id")
+            if tc_id in current_mode_tc_ids:
+                filtered.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": msg.get("content", ""),
+                })
+
+    return filtered
+
+
+def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admin",
+           is_handoff: bool = False) -> tuple[str, list]:
     """Send user message to AI, handle tool calls, return (reply, tool_log).
 
     user_content can be a plain string or a list of content parts (for multimodal
     messages containing images, e.g. when a PDF is uploaded).
-    mode: "admin" (GPT-4.1-nano) or "research" (Grok 4.20)
+    mode: "admin" or "research"
+    is_handoff: if True, marks the user message as a handoff prompt (stripped from
+                future cross-mode conversation views)
     """
-    conversation.append({"role": "user", "content": user_content})
+    msg_entry = {"role": "user", "content": user_content, "_mode": mode}
+    if is_handoff:
+        msg_entry["_handoff"] = True
+    conversation.append(msg_entry)
     tool_log = []
 
     active_client = research_client if mode == "research" else client
@@ -898,16 +1025,19 @@ def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admi
     system_prompt = _research_system_prompt() if mode == "research" else _build_system_prompt()
 
     for _ in range(MAX_TOOL_ROUNDS):
+        # Filter conversation so each agent only sees its own assistant responses
+        api_messages = [{"role": "system", "content": system_prompt}] + _filter_conversation(conversation, mode)
+
         response = active_client.chat.completions.create(
             model=active_model,
             max_tokens=4096,
-            messages=[{"role": "system", "content": system_prompt}] + conversation,
+            messages=api_messages,
             tools=TOOLS,
         )
 
         msg = response.choices[0].message
-        # Build assistant message for history
-        assistant_msg = {"role": "assistant", "content": msg.content or ""}
+        # Build assistant message for history — tagged with mode
+        assistant_msg = {"role": "assistant", "content": msg.content or "", "_mode": mode}
         if msg.tool_calls:
             assistant_msg["tool_calls"] = [
                 {
@@ -934,6 +1064,7 @@ def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admi
                 "role": "tool",
                 "tool_call_id": tc.id,
                 "content": result,
+                "_mode": mode,
             })
 
     return "I hit the tool call limit. Please try a simpler request.", tool_log
@@ -974,11 +1105,13 @@ def load_conversation_from_logs() -> tuple[list[dict], str]:
             if assistant_msg:
                 import re as _re
                 assistant_msg = _re.sub(r'^[🤖🔬\s]+\n?', '', assistant_msg).lstrip()
-                assistant_msg = _re.sub(r'^(?:J\.A\.R\.V\.I\.S\.|F\.R\.I\.D\.A\.Y\.)\s*>\s*\n?', '', assistant_msg).lstrip()
+                _admin_pat = _re.escape(ADMIN_AGENT_NAME)
+                _research_pat = _re.escape(RESEARCH_AGENT_NAME)
+                assistant_msg = _re.sub(rf'^(?:{_admin_pat}|{_research_pat})\s*>\s*\n?', '', assistant_msg, flags=_re.IGNORECASE).lstrip()
             if user_msg:
-                conv.append({"role": "user", "content": user_msg})
+                conv.append({"role": "user", "content": user_msg, "_mode": last_mode})
             if assistant_msg:
-                conv.append({"role": "assistant", "content": assistant_msg})
+                conv.append({"role": "assistant", "content": assistant_msg, "_mode": last_mode})
     except Exception as e:
         log.warning("Failed to load conversation history: %s", e)
     if len(conv) > MAX_CONVERSATION_MESSAGES:
@@ -1029,63 +1162,52 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mode = chat_mode.get(cid, "admin")
 
-    # Mode switching — keyword-based, not exact phrase matching
+    # Mode switching — centralized detection with typo tolerance
     user_lower = user_text.strip().lower()
-    yes_words = ("yes", "yeah", "yep", "sure", "ok", "okay", "do it", "go ahead")
-    wants_research = any(kw in user_lower for kw in ("research", "friday", "grok"))
-    wants_admin = any(kw in user_lower for kw in ("admin", "jarvis", "back"))
-    wants_yes = user_lower in yes_words
+    switch_target = _detect_mode_switch(user_text, mode, research_suggested.get(cid, False))
 
     # Switch to research (from admin)
-    if mode == "admin" and (wants_research or (research_suggested.get(cid) and wants_yes)):
+    if switch_target == "research" and mode == "admin":
         research_suggested[cid] = False
         chat_mode[cid] = "research"
         mode = "research"
-        # Don't just greet — immediately hand off to F.R.I.D.A.Y. with context
-        # Look at the last few assistant messages to figure out what was being discussed
-        recent_context = ""
-        for msg in reversed(conv[-6:]):
-            if msg.get("role") == "assistant" and msg.get("content"):
-                recent_context = msg["content"][:300]
-                break
         handoff = (
-            f"You are F.R.I.D.A.Y. (research mode). The user just switched from J.A.R.V.I.S. (admin mode). "
-            f"The user said: \"{user_text}\"\n"
-            f"Recent context from J.A.R.V.I.S.: \"{recent_context}\"\n"
-            "Pick up where J.A.R.V.I.S. left off. Do the research or verification the user is asking for. "
-            "Start working immediately — do not introduce yourself or ask what to do."
+            f"The user just switched from {ADMIN_AGENT_NAME} (admin mode) to you (research mode). "
+            f"Their message: \"{user_text}\"\n"
+            f"Review the conversation history and focus on the MOST RECENT topic only. "
+            f"Do NOT revisit older resolved questions — only address what the user is currently asking about. "
+            f"Start working immediately — do not introduce yourself or ask what to do."
         )
         if len(conv) > MAX_CONVERSATION_MESSAGES:
             conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
         tools_used = []
         try:
-            reply, tools_used = await asyncio.to_thread(ask_ai, handoff, conv, mode="research")
+            reply, tools_used = await asyncio.to_thread(ask_ai, handoff, conv, mode="research", is_handoff=True)
         except Exception as e:
             log.exception("AI API error")
             reply = f"Something went wrong: {e}"
         reply = _clean_content(reply)
-        if not reply.startswith("🤖"):
-            reply = "🤖🔬\n" + reply
+        if not reply.startswith(ADMIN_EMOJI):
+            reply = RESEARCH_EMOJI + "\n" + reply
         await _send_reply(update, user_text, reply, tools_used, mode="research")
         return
 
     # Switch to admin (from research)
-    if mode == "research" and (wants_admin or user_lower == "switch"):
+    if switch_target == "admin" and mode == "research":
         chat_mode[cid] = "admin"
-        reply = "🤖\nBack in admin mode. What's next?"
+        reply = f"{ADMIN_EMOJI}\nBack in admin mode\\. What\\'s next?"
         log_conversation(user_text, reply, mode="admin")
         await update.message.reply_text(reply, parse_mode="MarkdownV2")
         return
 
-    # Auto-switch to research for cardio exercises (admin mode only)
+    # One-shot research for cardio exercises (admin mode only) — stays in admin after
     cardio_keywords = ("treadmill", "cycling", "bike", "spin", "hiit", "jogging", "running", "swimming", "elliptical", "rowing machine", "stairmaster", "jump rope")
     if mode == "admin" and any(kw in user_lower for kw in cardio_keywords):
         # Check if it looks like exercise logging (has numbers like duration/speed/distance)
         import re
         has_numbers = bool(re.search(r'\d', user_text))
         if has_numbers:
-            chat_mode[cid] = "research"
-            # Inject the user's message as context for Grok 4.20
+            # One-shot: use research model for this response, but do NOT change chat_mode
             cardio_prompt = (
                 f"The user logged a cardio exercise: \"{user_text}\"\n\n"
                 "1. Pull their latest weight from Body Metrics using read_sheet.\n"
@@ -1094,20 +1216,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Cite the MET source.\n"
                 "3. Present the breakdown and ask: 'Approve this to log to the Cardio tab?'\n"
                 "4. Do NOT log until the user says approved.\n"
-                "5. After logging, say: 'Research complete. Say **switch back** to return to admin mode.'"
+                f"5. After logging, say: 'Done! You are still in admin mode with {ADMIN_AGENT_NAME}.'"
             )
-            # Trim conversation history
             if len(conv) > MAX_CONVERSATION_MESSAGES:
                 conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
             tools_used = []
             try:
-                reply, tools_used = await asyncio.to_thread(ask_ai, cardio_prompt, conv, mode="research")
+                reply, tools_used = await asyncio.to_thread(ask_ai, cardio_prompt, conv, mode="research", is_handoff=True)
             except Exception as e:
                 log.exception("AI API error")
                 reply = f"Something went wrong: {e}"
-            if not reply.startswith("🤖"):
-                reply = "🤖🔬\n" + reply
+            if not reply.startswith(ADMIN_EMOJI):
+                reply = RESEARCH_EMOJI + "\n" + reply
             await _send_reply(update, user_text, reply, tools_used, mode="research")
+            # Mode stays admin — one-shot research, no permanent switch
             return
 
     # Trim conversation history
@@ -1125,10 +1247,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = _clean_content(reply)
 
     # Prefix responses with agent emoji
-    if mode == "research" and not reply.startswith("🤖"):
-        reply = "🤖🔬\n" + reply
+    if mode == "research" and not reply.startswith(ADMIN_EMOJI):
+        reply = RESEARCH_EMOJI + "\n" + reply
     elif mode == "admin":
-        reply = "🤖\n" + reply
+        reply = ADMIN_EMOJI + "\n" + reply
 
     # If admin mode claimed a write but didn't call a write tool, auto-escalate to Grok
     if mode == "admin":
@@ -1154,22 +1276,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         refused = any(_re.search(p, _reply_lower) for p in _refusal_phrases)
         did_write = any(t.get("tool") in WRITE_TOOLS for t in tools_used)
         if (claimed_write or refused) and not did_write:
-            log.info("Admin claimed write without tool call — escalating to Grok 4.20")
-            chat_mode[cid] = "research"
+            log.info("Admin claimed write without tool call — one-shot escalation to Grok")
+            # One-shot: use research model to execute, but stay in admin mode
             escalation_prompt = (
                 f"Admin mode failed to execute a write action. The user said: \"{user_text}\"\n"
                 "Admin's response claimed changes were made but no write tool was called.\n"
                 "Please actually do what the user asked — use the appropriate tools (write_sheet, clear_row, log_workout, log_cardio, etc.).\n"
-                "After completing, say: 'Done. Say **switch back** to return to admin mode.'"
+                f"After completing, say: 'Done.'"
             )
             try:
-                reply, tools_used = await asyncio.to_thread(ask_ai, escalation_prompt, conv, mode="research")
-                if not reply.startswith("🤖"):
-                    reply = "🤖🔬\n" + reply
-                mode = "research"
+                reply, tools_used = await asyncio.to_thread(ask_ai, escalation_prompt, conv, mode="research", is_handoff=True)
+                if not reply.startswith(ADMIN_EMOJI):
+                    reply = RESEARCH_EMOJI + "\n" + reply
+                # Log as research but keep chat_mode as admin — one-shot, no permanent switch
+                mode = "research"  # only for this response's logging/prefix
             except Exception as e:
                 log.exception("Grok escalation failed")
                 reply += "\n\n⚠️ _Auto-escalation to Grok failed. Say **switch to research** to try manually._"
+
+        # If admin hallucinated a mode switch in its reply, one-shot re-run with research
+        if mode == "admin":
+            _mode_halluc_phrases = (
+                r'research\s+mode\s+activ',
+                r'(?:switching|switched)\s+to\s+research',
+                r'i\s+am\s+(?:now\s+)?in\s+(?:full\s+)?research',
+            )
+            if any(_re.search(p, _reply_lower) for p in _mode_halluc_phrases):
+                log.info("Admin hallucinated mode switch — one-shot research re-run")
+                # One-shot: don't change chat_mode, just use research for this response
+                mode = "research"  # only for this response's logging/prefix
+                try:
+                    handoff = (
+                        f"The user said: \"{user_text}\"\n"
+                        "Focus on their most recent topic. Start working immediately."
+                    )
+                    reply, tools_used = await asyncio.to_thread(ask_ai, handoff, conv, mode="research", is_handoff=True)
+                    reply = _clean_content(reply)
+                    if not reply.startswith(ADMIN_EMOJI):
+                        reply = RESEARCH_EMOJI + "\n" + reply
+                except Exception as e:
+                    log.exception("Research mode fallback failed")
+                    reply = f"{RESEARCH_EMOJI}\nResearch mode active. What would you like researched?"
 
         # If admin mode estimated research answers (and didn't escalate), nudge
         # But not if it read from the sheet — that's reporting, not estimating
@@ -1258,8 +1405,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = f"Something went wrong: {e}"
 
     mode = chat_mode.get(CHAT_ID, "admin")
-    if mode == "research" and not reply.startswith("🤖"):
-        reply = "🤖🔬\n" + reply
+    if mode == "research" and not reply.startswith(ADMIN_EMOJI):
+        reply = RESEARCH_EMOJI + "\n" + reply
     await _send_reply(update, user_text_for_log, reply, tools_used, mode=mode)
 
 
@@ -1289,8 +1436,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = f"Something went wrong: {e}"
 
     mode = chat_mode.get(CHAT_ID, "admin")
-    if mode == "research" and not reply.startswith("🤖"):
-        reply = "🤖🔬\n" + reply
+    if mode == "research" and not reply.startswith(ADMIN_EMOJI):
+        reply = RESEARCH_EMOJI + "\n" + reply
     await _send_reply(update, user_text, reply, tools_used, mode=mode)
 
 

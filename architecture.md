@@ -175,17 +175,35 @@ The entire application. ~1,275 lines of Python with dual-agent architecture:
 - 🤖 **J.A.R.V.I.S.** (admin mode) — GPT-4.1-nano via OpenAI API. Handles daily ops: logging, syncing, status, tool calls.
 - 🤖🔬 **F.R.I.D.A.Y.** (research mode) — Grok 4.20 via xAI API. Handles deep reasoning: calorie/MET calculations, exercise science, anything requiring factual precision.
 
-**Mode switching:**
-- User says "switch to research" / "switch back" (or "go back", "/research", "/admin")
-- Cardio keywords + numbers auto-switch to F.R.I.D.A.Y. for ACSM calculation → approval → log
-- If J.A.R.V.I.S. claims a write without calling a tool, or refuses ("I can't access"), auto-escalates to F.R.I.D.A.Y.
+**Mode switching** (`_detect_mode_switch` — centralized, typo-tolerant):
+- Fuzzy regex matching: "reseerch", "reserch", "reaserch" all match "research". Handles "friday", "grok", "admin", "jarvis".
+- Priority: research keywords win over admin keywords when both present (e.g. "go back to research" → research, not admin)
+- Confirmation words ("yes", "yeah", "sure", etc.) trigger research switch if it was just suggested — uses `startswith` not exact match for typo tolerance
+- "switch" / "switch back" alone toggles based on current mode; "back" alone → admin
+- Cardio keywords + numbers → one-shot research for ACSM calculation → stays in admin after
+- Write hallucination/refusal → one-shot escalation to research model → stays in admin after
+- Mode hallucination detection → if admin says "research mode activated", one-shot re-run with research model
+- All auto-escalations are **one-shot** — they use the research model for that single response but do NOT change chat_mode. Only explicit user requests ("switch to research") persist the mode change.
+
+**Agent identity config** (env vars — rename agents without touching code):
+- `ADMIN_AGENT_NAME` / `RESEARCH_AGENT_NAME` — agent display names (default: J.A.R.V.I.S. / F.R.I.D.A.Y.)
+- `ADMIN_SWITCH_KEYWORDS` / `RESEARCH_SWITCH_KEYWORDS` — comma-separated keywords for mode detection (default: admin,jarvis / research,friday,grok)
+- `ADMIN_EMOJI` / `RESEARCH_EMOJI` — hardcoded constants in bot.py (🤖 / 🤖🔬)
+- All system prompts, response strings, clean_content regex, and mode detection use these constants. soul.md uses generic "admin agent" / "research agent" language.
+
+**Conversation filtering** (`_filter_conversation`):
+- Before sending to the API, conversation is filtered per mode so each agent only sees its own responses as `role: assistant`
+- Cross-mode assistant messages are re-labeled as `role: user` with prefix `[{other_agent} said]: ...` — preserves context without identity confusion
+- Handoff/escalation prompts are tagged `_handoff=True` and stripped from the filtered view entirely
+- Tool messages only included if they belong to the current mode's tool calls
+- All messages tagged with `_mode` metadata for filtering; `load_conversation_from_logs` also tags from log entries
 
 **14 tools:** log_workout, log_cardio, log_weight, log_nutrition, read_sheet, write_sheet, clear_row, save_memory, read_memory, upload_to_drive, list_drive, download_from_drive, read_pdf, sync_fitbit
 
 **Safety nets (code-level, model-agnostic):**
 - `_append_failure_notice` — if tool errors aren't surfaced in reply
 - `_append_write_hallucination_notice` — if bot claims write with no write tool call
-- Auto-escalation — nano refusal/hallucination → Grok takes over
+- One-shot escalation — admin refusal/hallucination → research model handles single response
 - Research estimate warning — admin guesses calories without reading sheet
 - `_clean_content` — strips model-generated name prefixes and bad markdown
 - `_escape_markdownv2` — escapes special chars for Telegram rendering
@@ -506,6 +524,7 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-06:** Added daily-audit-template.md — end-of-day Claude Code audit checklist. **Why:** Bash QA catches mechanical failures; the daily audit catches reasoning errors, logic mistakes, and memory retention issues. Template covers: said-vs-did, logic check, memory retention, compliance, data integrity, backfills, model intuition tracking, and guardrail decisions.
 - **2026-04-06:** Added multi-agent mode switching to bot.py. Admin mode (GPT-4.1-nano) handles daily ops; Research mode (Grok 4.20-reasoning) handles deep reasoning, calorie math, exercise science. User switches with "switch to research"/"switch back". Research replies prefixed with 🔬. Code-level guardrail: if admin mode outputs calorie/MET estimates without using research tool, auto-appends warning suggesting research mode. Logs record both `model` and `mode` for audit. **Why:** Admin model shouldn't guess research answers. Grok 4.20 is better at factual reasoning but expensive — only used when needed. User controls the switch, bot suggests it.
 - **2026-04-06:** Added tool failure safety net to bot.py. Two layers: (1) `execute_tool` returns emphatic error instructing AI to tell the user, (2) `_append_failure_notice()` auto-appends failure notice if bot's reply doesn't mention tool errors. Applied to all three handlers (text, document, photo). **Why:** Bot told user "saved" when save_memory returned Permission denied. Model saw the error but ignored it. Code-level safety net makes the system self-correcting without adding model instructions.
+- **2026-04-06:** Three architectural fixes to dual-agent system. (1) **Conversation filtering** (`_filter_conversation`): each agent now only sees its own responses as `role: assistant`; cross-mode responses become `[Other Agent said]: ...` in user role; handoff prompts stripped entirely. Root cause: both agents shared one conversation stream, so each saw the other's responses as their own words — caused identity confusion, mode hallucinations, and stale-question answers. (2) **One-shot escalation**: cardio auto-switch, write escalation, and mode hallucination detection now use research model for a single response without changing `chat_mode`. Previously they set mode to "research" permanently, so the user got silently stuck in research mode. (3) **Agent names to config**: `ADMIN_AGENT_NAME`, `RESEARCH_AGENT_NAME`, `*_SWITCH_KEYWORDS` are now env vars. All system prompts, regexes, response strings, and mode detection derive from these constants. soul.md uses generic language. Rename agents or swap models via env vars, no code changes. **Why:** 5pm-9pm session showed: mode switching failing on typos, admin hallucinating mode switches 6+ times, research answering old FFMI question when user asked about calories, bot silently stuck in research mode after auto-escalation. User correctly diagnosed that the models work fine in a clean chat window — the problem was the conversation architecture feeding mixed identities. **Connections:** `_filter_conversation`, `_detect_mode_switch`, `ask_ai` (is_handoff param), all handlers, config constants block, soul.md.
 - **2026-04-06:** Swapped admin model from Grok 4.1 Fast Reasoning to GPT-4.1-nano ($0.10/$0.40). **Why:** Grok repeatedly hallucinated tool calls (said "saved"/"logged" without calling tools). Nano actually calls tools. Added model field to conversation logs for A/B comparison.
 - **2026-04-06:** Added `clear_row` tool for blanking sheet rows. Added row numbers to `read_sheet` output (e.g. "Row 16: ...") so bot can target correct rows for clear/write. **Why:** Bot cleared wrong row because `read_sheet` returned sorted data with no row positions. Also: Grok 4.1 cleared row 3 (Leg Curls from 2026-04-04) by mistake — data unrecoverable, no April 4 logs exist.
 - **2026-04-06:** Added `research` tool — calls Grok 4.20 (grok-4.20-0309-reasoning) for deep reasoning tasks. Used for calorie/MET calculations, exercise science, nutrition research. Admin model (nano) handles tool calling; research model handles factual accuracy. Results should be cached in memory/Notes. **Why:** Admin model shouldn't guess at research — wrong MET value (7 instead of ~4) produced 320cal instead of ~150-200cal.
