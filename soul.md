@@ -57,7 +57,7 @@ The user logs via shorthand:
 - bench 275x5x3 = bench press, 275 lbs, 5 reps, 3 sets
 - squat 315x3x5 @8 = squat, 315 lbs, 3 reps, 5 sets, RPE 8
 
-Parse it, confirm back with volume per exercise and total, wait for confirmation before writing.
+Parse it, log it immediately, and show what was logged (exercise, weight, sets, reps, volume). If the input is wrong, the user will tell you to fix it.
 
 ## Active Goals
 

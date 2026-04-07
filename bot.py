@@ -92,7 +92,7 @@ TOOLS = [
             "name": "log_workout",
             "description": (
                 "Log workout exercises to the Training Log Google Sheet. "
-                "Call ONLY after the user confirms the parsed workout summary. "
+                "Log immediately when the user reports exercises — do not wait for confirmation. "
                 "Columns: Date | Exercise | Sets | Reps | Weight (lbs) | RPE | Volume (lbs) | Session Type | Data Source"
             ),
             "parameters": {
@@ -456,14 +456,15 @@ def _pdf_to_base64_images(
 
 
 def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
-    """Read back the sheet and verify the write landed."""
-    check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:Z"])
+    """Read back the sheet and verify the write landed in the correct columns."""
+    check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:B"])
     if check.startswith("ERROR"):
         return " [VERIFY FAILED: could not read sheet back]"
     for line in check.strip().split("\n"):
-        if expected_date in line and expected_field in line:
+        cols = line.split("\t")
+        if len(cols) >= 2 and expected_date in cols[0] and expected_field in cols[1]:
             return " [VERIFIED]"
-    return f" [VERIFY FAILED: could not find {expected_date} with {expected_field}]"
+    return f" [VERIFY FAILED: could not find {expected_date} with {expected_field} in columns A-B]"
 
 
 def tool_log_workout(data: dict) -> str:
@@ -482,7 +483,7 @@ def tool_log_workout(data: dict) -> str:
         ])
     result = _run_gog([
         "sheets", "append", SHEET_ID, "Training Log!A:I",
-        "--values-json", json.dumps(rows), "--insert", "INSERT_ROWS", "--input", "RAW",
+        "--values-json", json.dumps(rows), "--insert", "OVERWRITE", "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result
@@ -500,7 +501,7 @@ def tool_log_cardio(data: dict) -> str:
     ]]
     result = _run_gog([
         "sheets", "append", SHEET_ID, "Cardio!A:I",
-        "--values-json", json.dumps(row), "--insert", "INSERT_ROWS", "--input", "RAW",
+        "--values-json", json.dumps(row), "--insert", "OVERWRITE", "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result
@@ -518,7 +519,7 @@ def tool_log_weight(data: dict) -> str:
     row = [[date, str(lbs), str(kg), bf, "", "", "", source, notes]]
     result = _run_gog([
         "sheets", "append", SHEET_ID, "Body Metrics!A:I",
-        "--values-json", json.dumps(row), "--insert", "INSERT_ROWS", "--input", "RAW",
+        "--values-json", json.dumps(row), "--insert", "OVERWRITE", "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result
@@ -536,7 +537,7 @@ def tool_log_nutrition(data: dict) -> str:
     ]]
     result = _run_gog([
         "sheets", "append", SHEET_ID, "Nutrition!A:I",
-        "--values-json", json.dumps(row), "--insert", "INSERT_ROWS", "--input", "RAW",
+        "--values-json", json.dumps(row), "--insert", "OVERWRITE", "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result

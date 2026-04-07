@@ -28,10 +28,9 @@ Last updated: 2026-04-05
 If any of these are missing, the report is incomplete.
 
 ### Log a workout
-1. AI parses the input and confirms back with volume
-2. the user says APPROVE / confirms
-3. `log_workout` → Training Log (writes rows)
-4. Tool result should contain `[VERIFIED]`
+1. AI parses the input and logs immediately via `log_workout`
+2. Tool result should contain `[VERIFIED]`
+3. AI shows what was logged (exercises, weight, sets, reps, volume) — user corrects if needed
 
 ### Log weight
 1. `log_weight` → Body Metrics (writes row)
