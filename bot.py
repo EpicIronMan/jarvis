@@ -18,6 +18,7 @@ import asyncio
 import base64
 import io
 import re
+import time
 
 from telegram import Update
 from telegram.ext import (
@@ -779,6 +780,26 @@ def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = 
         return f"⚠️ TOOL FAILED — {name}: {e}. YOU MUST tell the user this action failed. Do NOT say it succeeded."
 
 
+def _api_call_with_retry(system_prompt: str, conversation: list[dict]) -> object:
+    """Make API call with retry on 429 rate limits."""
+    backoff = [30, 60, 120]
+    for attempt in range(len(backoff) + 1):
+        try:
+            return client.chat.completions.create(
+                model=MODEL,
+                max_tokens=4096,
+                messages=[{"role": "system", "content": system_prompt}] + conversation,
+                tools=TOOLS,
+            )
+        except Exception as e:
+            if "429" in str(e) and attempt < len(backoff):
+                wait = backoff[attempt]
+                log.warning("Rate limited (429), retrying in %ds (attempt %d/%d)", wait, attempt + 1, len(backoff))
+                time.sleep(wait)
+            else:
+                raise
+
+
 def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, list]:
     """Send user message to AI, handle tool calls, return (reply, tool_log)."""
     conversation.append({"role": "user", "content": user_content})
@@ -786,12 +807,7 @@ def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, lis
     system_prompt = _build_system_prompt()
 
     for _ in range(MAX_TOOL_ROUNDS):
-        response = client.chat.completions.create(
-            model=MODEL,
-            max_tokens=4096,
-            messages=[{"role": "system", "content": system_prompt}] + conversation,
-            tools=TOOLS,
-        )
+        response = _api_call_with_retry(system_prompt, conversation)
 
         msg = response.choices[0].message
         assistant_msg = {"role": "assistant", "content": msg.content or ""}
@@ -807,7 +823,29 @@ def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, lis
         conversation.append(assistant_msg)
 
         if not msg.tool_calls:
-            return msg.content or "", tool_log
+            # Retry once on empty response
+            if not (msg.content or "").strip():
+                log.warning("Empty response from model, retrying once")
+                conversation.pop()  # remove the empty assistant message
+                response = _api_call_with_retry(system_prompt, conversation)
+                msg = response.choices[0].message
+                if not (msg.content or "").strip() and not msg.tool_calls:
+                    return "I drew a blank on that one. Could you try again?", tool_log
+                if not msg.tool_calls:
+                    return msg.content or "", tool_log
+                # If retry produced tool calls, fall through to tool handling
+                assistant_msg = {"role": "assistant", "content": msg.content or ""}
+                assistant_msg["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                    }
+                    for tc in msg.tool_calls
+                ]
+                conversation.append(assistant_msg)
+            else:
+                return msg.content or "", tool_log
 
         for tc in msg.tool_calls:
             fn_name = tc.function.name
@@ -831,7 +869,7 @@ conversations: dict[int, list] = {}
 
 
 def load_conversation_from_logs() -> list[dict]:
-    """Reload today's conversation from log."""
+    """Reload today's conversation from log, including tool call history."""
     today = _today()
     log_file = LOG_DIR / f"{today}.jsonl"
     conv = []
@@ -844,6 +882,7 @@ def load_conversation_from_logs() -> list[dict]:
             entry = json.loads(line)
             user_msg = entry.get("user", "")
             assistant_msg = entry.get("assistant", "")
+            tools = entry.get("tools", [])
             if assistant_msg:
                 # Strip emoji/name prefixes from history
                 assistant_msg = re.sub(r'^[🤖🔬\s]+\n?', '', assistant_msg).lstrip()
@@ -851,7 +890,14 @@ def load_conversation_from_logs() -> list[dict]:
                 assistant_msg = re.sub(rf'^{_name_pat}\s*>\s*\n?', '', assistant_msg, flags=re.IGNORECASE).lstrip()
             if user_msg:
                 conv.append({"role": "user", "content": user_msg})
-            if assistant_msg:
+            if tools:
+                # Rebuild tool calls as a summary the model can reason about
+                tool_summary = "\n".join(
+                    f"[Tool: {t['tool']}({json.dumps(t.get('input', {}))}) → {t.get('result', 'no result')}]"
+                    for t in tools
+                )
+                conv.append({"role": "assistant", "content": f"{tool_summary}\n\n{assistant_msg}"})
+            elif assistant_msg:
                 conv.append({"role": "assistant", "content": assistant_msg})
     except Exception as e:
         log.warning("Failed to load conversation history: %s", e)
@@ -915,7 +961,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
     except Exception as e:
         log.exception("AI API error")
-        reply = f"Something went wrong: {e}"
+        if "429" in str(e):
+            reply = "API credits are exhausted — retries didn't help. Try again later or check the xAI billing dashboard."
+        else:
+            reply = f"Something went wrong: {e}"
 
     reply = _clean_content(reply)
     reply = AGENT_EMOJI + "\n" + reply
