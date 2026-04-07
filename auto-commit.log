@@ -69,3 +69,7 @@ Committed and pushed.
 [master b0f9351] auto: snapshot 2026-04-06
  4 files changed, 137 insertions(+), 32 deletions(-)
 Committed and pushed.
+[master d5b27fb] auto: snapshot 2026-04-06
+ 4 files changed, 183 insertions(+), 103 deletions(-)
+ create mode 100644 claude-sessions/2026-04-06-telegram-audit-and-fixes.md
+Committed and pushed.
