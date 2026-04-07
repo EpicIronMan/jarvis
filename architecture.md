@@ -169,47 +169,24 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 
 ### 1. Telegram Bot (`bot.py`)
 
-The entire application. ~1,275 lines of Python with dual-agent architecture:
+The entire application. ~1,035 lines of Python. Single agent, single model, single conversation.
 
-**Agents:**
-- 🤖 **J.A.R.V.I.S.** (admin mode) — GPT-4.1-nano via OpenAI API. Handles daily ops: logging, syncing, status, tool calls.
-- 🤖🔬 **F.R.I.D.A.Y.** (research mode) — Grok 4.20 via xAI API. Handles deep reasoning: calorie/MET calculations, exercise science, anything requiring factual precision.
+**Architecture:** One AI agent handles everything — daily chat, logging, research, calorie calculations, trend analysis. No mode switching, no dual-agent, no conversation filtering. The model reasons about what to do and uses tools to do it.
 
-**Mode switching** (`_detect_mode_switch` — centralized, typo-tolerant):
-- Fuzzy regex matching: "reseerch", "reserch", "reaserch" all match "research". Handles "friday", "grok", "admin", "jarvis".
-- Priority: research keywords win over admin keywords when both present (e.g. "go back to research" → research, not admin)
-- Confirmation words ("yes", "yeah", "sure", etc.) trigger research switch if it was just suggested — uses `startswith` not exact match for typo tolerance
-- "switch" / "switch back" alone toggles based on current mode; "back" alone → admin
-- Cardio keywords + numbers → one-shot research for ACSM calculation → stays in admin after
-- Write hallucination/refusal → one-shot escalation to research model → stays in admin after
-- Mode hallucination detection → if admin says "research mode activated", one-shot re-run with research model
-- All auto-escalations are **one-shot** — they use the research model for that single response but do NOT change chat_mode. Only explicit user requests ("switch to research") persist the mode change.
+**Model:** Configurable via env vars (`AI_MODEL`, `AI_BASE_URL`, `AI_API_KEY`). Currently Grok 4.20 via xAI API. Swap to any OpenAI-compatible provider by changing env vars.
 
-**Agent identity config** (env vars — rename agents without touching code):
-- `ADMIN_AGENT_NAME` / `RESEARCH_AGENT_NAME` — agent display names (default: J.A.R.V.I.S. / F.R.I.D.A.Y.)
-- `ADMIN_SWITCH_KEYWORDS` / `RESEARCH_SWITCH_KEYWORDS` — comma-separated keywords for mode detection (default: admin,jarvis / research,friday,grok)
-- `ADMIN_EMOJI` / `RESEARCH_EMOJI` — hardcoded constants in bot.py (🤖 / 🤖🔬)
-- All system prompts, response strings, clean_content regex, and mode detection use these constants. soul.md uses generic "admin agent" / "research agent" language.
-
-**Conversation filtering** (`_filter_conversation`):
-- Before sending to the API, conversation is filtered per mode so each agent only sees its own responses as `role: assistant`
-- Cross-mode assistant messages are re-labeled as `role: user` with prefix `[{other_agent} said]: ...` — preserves context without identity confusion
-- Handoff/escalation prompts are tagged `_handoff=True` and stripped from the filtered view entirely
-- Tool messages only included if they belong to the current mode's tool calls
-- All messages tagged with `_mode` metadata for filtering; `load_conversation_from_logs` also tags from log entries
+**Agent identity:** `AGENT_NAME` and `AGENT_EMOJI` env vars. Default: J.A.R.V.I.S. / 🤖. Change name without touching code.
 
 **14 tools:** log_workout, log_cardio, log_weight, log_nutrition, read_sheet, write_sheet, clear_row, save_memory, read_memory, upload_to_drive, list_drive, download_from_drive, read_pdf, sync_fitbit
 
-**Safety nets (code-level, model-agnostic):**
+**Monitoring (passive — flags issues, never intervenes):**
 - `_append_failure_notice` — if tool errors aren't surfaced in reply
 - `_append_write_hallucination_notice` — if bot claims write with no write tool call
-- One-shot escalation — admin refusal/hallucination → research model handles single response
-- Research estimate warning — admin guesses calories without reading sheet
 - `_clean_content` — strips model-generated name prefixes and bad markdown
 - `_escape_markdownv2` — escapes special chars for Telegram rendering
-- `_send_reply` — shared send logic across all handlers (safety nets → log → escape → send)
+- `_send_reply` — shared send logic across all handlers (monitoring → log → escape → send)
 
-**Logging:** All conversations to `logs/YYYY-MM-DD.jsonl` with model name and mode (admin/research) per entry. Full conversation reload on restart (no stripping).
+**Logging:** All conversations to `logs/YYYY-MM-DD.jsonl` with model name per entry. Full conversation reload on restart.
 
 **Formatting:** MarkdownV2 for bold rendering. No markdown headers, no triple asterisks — code strips them.
 
@@ -217,7 +194,7 @@ The entire application. ~1,275 lines of Python with dual-agent architecture:
 **Dependencies:** `openai`, `python-telegram-bot`, `pdf2image`, `Pillow`
 **System dependency:** `poppler-utils` (for PDF→image conversion)
 **Runs as:** systemd service `lifeos-bot` under user `openclaw`
-**Cost:** Admin ~$0.10/$0.40 per MTok (nano). Research ~$2/$6 per MTok (Grok 4.20, rare calls). Daily cost: pennies.
+**Cost:** Grok 4.20 ~$2/$6 per MTok. Plan to test cheaper models (GPT-4.1-mini) once architecture is proven stable.
 
 ### 2. Morning Brief Cron (`morning-brief.sh`)
 

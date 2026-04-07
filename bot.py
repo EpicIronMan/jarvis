@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LifeOS Bot — AI fitness coach accessible via Telegram (or other chat interfaces).
+"""LifeOS Bot — single-agent AI fitness coach via Telegram.
 
 All code, config, and docs live in /home/openclaw/lifeos/ (git repo).
 See architecture.md for the full system map.
@@ -17,6 +17,7 @@ import pathlib
 import asyncio
 import base64
 import io
+import re
 
 from telegram import Update
 from telegram.ext import (
@@ -45,24 +46,14 @@ SOUL_PATH = BASE_DIR / "soul.md"
 # AI model config — swap provider by changing these env vars
 AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("XAI_API_KEY", "")
 AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.x.ai/v1")
-MODEL = os.environ.get("AI_MODEL", "grok-4-1-fast")
-# Research model — Grok 4.20 for deep reasoning tasks (calorie math, exercise science)
-RESEARCH_API_KEY = os.environ.get("XAI_API_KEY", "")
-RESEARCH_BASE_URL = "https://api.x.ai/v1"
-RESEARCH_MODEL = os.environ.get("RESEARCH_MODEL", "grok-4.20-0309-reasoning")
+MODEL = os.environ.get("AI_MODEL", "grok-4.20-0309-reasoning")
+
+# Agent identity — configurable for rebranding
+AGENT_NAME = os.environ.get("AGENT_NAME", "J.A.R.V.I.S.")
+AGENT_EMOJI = os.environ.get("AGENT_EMOJI", "🤖")
 
 MAX_TOOL_ROUNDS = int(os.environ.get("MAX_TOOL_ROUNDS", "10"))
 MAX_CONVERSATION_MESSAGES = int(os.environ.get("MAX_CONVERSATION_MESSAGES", "200"))
-
-# Agent identity config — change names/keywords here, everything else follows
-ADMIN_AGENT_NAME = os.environ.get("ADMIN_AGENT_NAME", "J.A.R.V.I.S.")
-ADMIN_EMOJI = "🤖"
-ADMIN_SWITCH_KEYWORDS = [kw.strip().lower() for kw in
-    os.environ.get("ADMIN_SWITCH_KEYWORDS", "admin,jarvis").split(",")]
-RESEARCH_AGENT_NAME = os.environ.get("RESEARCH_AGENT_NAME", "F.R.I.D.A.Y.")
-RESEARCH_EMOJI = "🤖🔬"
-RESEARCH_SWITCH_KEYWORDS = [kw.strip().lower() for kw in
-    os.environ.get("RESEARCH_SWITCH_KEYWORDS", "research,friday,grok").split(",")]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -81,11 +72,6 @@ def _build_system_prompt() -> str:
     context = (
         f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
         f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
-        f"\nYou are CURRENTLY in admin mode ({ADMIN_AGENT_NAME}). Do NOT say you are {RESEARCH_AGENT_NAME}. "
-        "CRITICAL: You CANNOT switch modes — only the system can. Never say 'Research mode activated' "
-        "or 'Switching to research mode'. For research-heavy tasks (calorie calculations, MET values, "
-        "exercise science), say ONLY: 'That requires some research. Want to switch to research mode?' "
-        "and STOP — do not attempt to answer the research question yourself.\n"
     )
     return _SOUL_TEXT + context
 
@@ -97,7 +83,7 @@ GOG_ENV = {
     "GOG_KEYRING_PASSWORD": os.environ.get("GOG_KEYRING_PASSWORD", ""),
 }
 
-# --- Tool definitions (OpenAI format, used by xAI) ---
+# --- Tool definitions (OpenAI format) ---
 TOOLS = [
     {
         "type": "function",
@@ -451,11 +437,7 @@ def _today() -> str:
 def _pdf_to_base64_images(
     pdf_path: str, first_page: int = 1, last_page: int | None = None
 ) -> tuple[list[str], int]:
-    """Convert PDF pages to base64-encoded JPEG images for AI vision.
-
-    Returns (list of base64 strings, total page count in the PDF).
-    If last_page is None, converts all pages.
-    """
+    """Convert PDF pages to base64-encoded JPEG images for AI vision."""
     from pdf2image import convert_from_path
     from pdf2image.pdf2image import pdfinfo_from_path
     info = pdfinfo_from_path(pdf_path)
@@ -473,7 +455,7 @@ def _pdf_to_base64_images(
 
 
 def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
-    """Read back the sheet and verify the write landed (searches all rows for the date)."""
+    """Read back the sheet and verify the write landed."""
     check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:Z"])
     if check.startswith("ERROR"):
         return " [VERIFY FAILED: could not read sheet back]"
@@ -493,22 +475,13 @@ def tool_log_workout(data: dict) -> str:
         volume = ex["sets"] * ex["reps"] * ex["weight_lbs"]
         total_volume += volume
         rows.append([
-            date,
-            ex["name"],
-            str(ex["sets"]),
-            str(ex["reps"]),
-            str(ex["weight_lbs"]),
-            str(ex.get("rpe", "")),
-            str(volume),
-            session_type,
-            "TELEGRAM",
+            date, ex["name"], str(ex["sets"]), str(ex["reps"]),
+            str(ex["weight_lbs"]), str(ex.get("rpe", "")),
+            str(volume), session_type, "TELEGRAM",
         ])
-    values_json = json.dumps(rows)
     result = _run_gog([
         "sheets", "append", SHEET_ID, "Training Log!A:I",
-        "--values-json", values_json,
-        "--insert", "INSERT_ROWS",
-        "--input", "RAW",
+        "--values-json", json.dumps(rows), "--insert", "INSERT_ROWS", "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result
@@ -519,21 +492,14 @@ def tool_log_workout(data: dict) -> str:
 def tool_log_cardio(data: dict) -> str:
     date = _today()
     row = [[
-        date,
-        data["exercise"],
-        str(data["duration_min"]),
-        str(data.get("speed", "")),
-        str(data.get("incline", "")),
-        str(data["net_calories"]),
-        str(data["met_used"]),
-        "TELEGRAM",
-        data.get("notes", ""),
+        date, data["exercise"], str(data["duration_min"]),
+        str(data.get("speed", "")), str(data.get("incline", "")),
+        str(data["net_calories"]), str(data["met_used"]),
+        "TELEGRAM", data.get("notes", ""),
     ]]
     result = _run_gog([
         "sheets", "append", SHEET_ID, "Cardio!A:I",
-        "--values-json", json.dumps(row),
-        "--insert", "INSERT_ROWS",
-        "--input", "RAW",
+        "--values-json", json.dumps(row), "--insert", "INSERT_ROWS", "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result
@@ -551,9 +517,7 @@ def tool_log_weight(data: dict) -> str:
     row = [[date, str(lbs), str(kg), bf, "", "", "", source, notes]]
     result = _run_gog([
         "sheets", "append", SHEET_ID, "Body Metrics!A:I",
-        "--values-json", json.dumps(row),
-        "--insert", "INSERT_ROWS",
-        "--input", "RAW",
+        "--values-json", json.dumps(row), "--insert", "INSERT_ROWS", "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result
@@ -564,21 +528,14 @@ def tool_log_weight(data: dict) -> str:
 def tool_log_nutrition(data: dict) -> str:
     date = _today()
     row = [[
-        date,
-        str(data["calories"]),
-        str(data["protein_g"]),
-        str(data.get("carbs_g", "")),
-        str(data.get("fat_g", "")),
-        str(data.get("fiber_g", "")),
-        str(data.get("sodium_mg", "")),
-        data.get("data_source", "MFP"),
-        data.get("notes", ""),
+        date, str(data["calories"]), str(data["protein_g"]),
+        str(data.get("carbs_g", "")), str(data.get("fat_g", "")),
+        str(data.get("fiber_g", "")), str(data.get("sodium_mg", "")),
+        data.get("data_source", "MFP"), data.get("notes", ""),
     ]]
     result = _run_gog([
         "sheets", "append", SHEET_ID, "Nutrition!A:I",
-        "--values-json", json.dumps(row),
-        "--insert", "INSERT_ROWS",
-        "--input", "RAW",
+        "--values-json", json.dumps(row), "--insert", "INSERT_ROWS", "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result
@@ -594,12 +551,10 @@ def tool_read_sheet(data: dict) -> str:
         return output
     lines = output.strip().split("\n")
     header = lines[0] if lines else ""
-    # Keep row numbers (1-indexed, row 1 = header) so bot can target rows for clear/write
     numbered = []
     for i, line in enumerate(lines[1:], start=2):
         if line.strip() and not line.startswith("←") and len(line) > 4 and line[0:4].isdigit():
             numbered.append((i, line))
-    # Sort by date descending (newest first)
     numbered.sort(key=lambda x: x[1], reverse=True)
     recent = numbered[:num_rows]
     result_lines = [f"Row 1: {header}"]
@@ -609,19 +564,15 @@ def tool_read_sheet(data: dict) -> str:
 
 
 def tool_write_sheet(data: dict) -> str:
-    """Write to any cell/range in the Google Sheet."""
     range_str = data["range"]
     values = data["values"]
     reason = data["reason"]
-    values_json = json.dumps(values)
     result = _run_gog([
         "sheets", "update", SHEET_ID, range_str,
-        "--values-json", values_json,
-        "--input", "RAW",
+        "--values-json", json.dumps(values), "--input", "RAW",
     ])
     if result.startswith("ERROR"):
         return result
-    # Verify the write landed
     tab = range_str.split("!")[0] if "!" in range_str else range_str
     check = _run_gog(["sheets", "get", SHEET_ID, range_str])
     if check.startswith("ERROR"):
@@ -633,34 +584,26 @@ def tool_write_sheet(data: dict) -> str:
 
 
 def tool_clear_row(data: dict) -> str:
-    """Clear a row/range in the Google Sheet."""
     range_str = data["range"]
     reason = data["reason"]
-    result = _run_gog([
-        "sheets", "clear", SHEET_ID, range_str,
-        "--no-input",
-    ])
+    result = _run_gog(["sheets", "clear", SHEET_ID, range_str, "--no-input"])
     if result.startswith("ERROR"):
         return result
-    # Verify it's actually blank
     check = _run_gog(["sheets", "get", SHEET_ID, range_str])
     if check.startswith("ERROR") or check.strip() == "" or all(c in (' ', '\t', '\n') for c in check):
         return f"Cleared {range_str}. Reason: {reason} [VERIFIED]"
     return f"Clear sent to {range_str} but cells may not be empty. Read-back: {check[:200]}. Reason: {reason}"
 
 
-
 def tool_save_memory(data: dict) -> str:
     path = MEMORY_DIR / "memory.md"
     entry = data["entry"].replace("\\n", "\n").strip()
-    # Append to the single memory file
     with open(path, "a") as f:
         f.write(f"\n- {entry}\n")
-    # Verify
     content = path.read_text()
     if entry in content:
-        return f"Remembered [VERIFIED]"
-    return f"Save failed [VERIFY FAILED]"
+        return "Remembered [VERIFIED]"
+    return "Save failed [VERIFY FAILED]"
 
 
 def tool_read_memory(data: dict) -> str:
@@ -673,72 +616,49 @@ def tool_read_memory(data: dict) -> str:
 def tool_upload_to_drive(data: dict) -> str:
     local_path = data["local_path"]
     drive_name = data.get("drive_name", pathlib.Path(local_path).name)
-    result = _run_gog([
-        "drive", "upload", local_path,
-        "--parent", DRIVE_UPLOADS_FOLDER,
-        "--name", drive_name,
-    ])
-    return result
+    return _run_gog(["drive", "upload", local_path, "--parent", DRIVE_UPLOADS_FOLDER, "--name", drive_name])
 
 
 def tool_list_drive(data: dict) -> str:
-    """List files in a Google Drive folder."""
     folder_id = data.get("folder_id", DRIVE_UPLOADS_FOLDER)
-    result = _run_gog(["drive", "ls", "--parent", folder_id])
-    if result.startswith("ERROR"):
-        return result
-    return result
+    return _run_gog(["drive", "ls", "--parent", folder_id])
 
 
 def tool_download_from_drive(data: dict) -> str:
-    """Download a file from Google Drive to local uploads directory."""
     file_id = data["file_id"]
     filename = data["filename"]
     local_path = UPLOAD_DIR / filename
-
-    # Cache: skip download if file already exists locally
     if local_path.exists():
         return f"File already cached locally: {local_path}"
-
     result = _run_gog(["drive", "download", file_id, "--output", str(local_path)], timeout=60)
     if result.startswith("ERROR"):
         return result
-
-    # Size guardrail: reject files over 20MB
     if local_path.exists() and local_path.stat().st_size > 20 * 1024 * 1024:
         local_path.unlink()
         return "ERROR: File exceeds 20MB limit. Download removed."
-
     return f"Downloaded to {local_path} ({local_path.stat().st_size // 1024} KB)"
 
 
 def tool_read_pdf(data: dict, conversation: list[dict] | None = None) -> str:
-    """Read a PDF by converting to images and injecting into conversation for AI vision."""
     filename = data["filename"]
     first_page = data.get("first_page", 1)
-    last_page = data.get("last_page", first_page + 4)  # default: 5 pages per read
+    last_page = data.get("last_page", first_page + 4)
     pdf_path = UPLOAD_DIR / filename
     if not pdf_path.exists():
-        # Try matching without exact case
         for f in UPLOAD_DIR.iterdir():
             if f.name.lower() == filename.lower():
                 pdf_path = f
                 break
         else:
-            return f"ERROR: File not found: {filename}. Available files: {', '.join(f.name for f in UPLOAD_DIR.iterdir() if f.suffix.lower() == '.pdf')}"
+            return f"ERROR: File not found: {filename}. Available: {', '.join(f.name for f in UPLOAD_DIR.iterdir() if f.suffix.lower() == '.pdf')}"
     try:
-        b64_images, total_pages = _pdf_to_base64_images(
-            str(pdf_path), first_page=first_page, last_page=last_page,
-        )
+        b64_images, total_pages = _pdf_to_base64_images(str(pdf_path), first_page=first_page, last_page=last_page)
         pages_read = len(b64_images)
         range_desc = f"pages {first_page}-{first_page + pages_read - 1} of {total_pages}"
         if conversation is not None:
             content_parts = [{"type": "text", "text": f"[PDF content from {filename} — {range_desc}:]"}]
             for b64 in b64_images:
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-                })
+                content_parts.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
             conversation.append({"role": "user", "content": content_parts})
         log.info("PDF read: %s (%s, %d images)", filename, range_desc, pages_read)
         return f"PDF loaded: {filename} ({range_desc}). The pages are now visible to you as images above."
@@ -747,7 +667,6 @@ def tool_read_pdf(data: dict, conversation: list[dict] | None = None) -> str:
 
 
 def tool_sync_fitbit(data: dict) -> str:
-    """Trigger an immediate Fitbit data sync by running the script directly."""
     try:
         result = subprocess.run(
             ["python3", "/home/openclaw/fitbit_sync.py"],
@@ -778,9 +697,10 @@ TOOL_DISPATCH = {
     "sync_fitbit": tool_sync_fitbit,
 }
 
-# Tools that need conversation context injected (for multimodal content)
 TOOLS_WITH_CONVERSATION = {"read_pdf"}
 
+
+# --- Monitoring (passive — flags issues, never intervenes) ---
 
 def _append_failure_notice(reply: str, tools_used: list[dict]) -> str:
     """If any tool failed and the bot didn't mention it, append a notice."""
@@ -798,9 +718,7 @@ WRITE_TOOLS = {"write_sheet", "clear_row", "log_workout", "log_cardio", "log_wei
 
 
 def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> str:
-    """If the bot claims it wrote/updated/fixed data but made no write tool calls, append warning."""
-    import re
-    # Match phrases where the bot claims it JUST performed a write action (not past descriptions)
+    """If the bot claims it wrote/updated data but made no write tool calls, append warning."""
     action_phrases = (
         r"i(?:'ve| have) (?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
         r"(?:updated|fixed|corrected|logged|cleared|deleted|removed|saved|added|appended) (?:the|your|it|row|entry|data)",
@@ -819,87 +737,33 @@ def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> st
     return reply + "\n\n⚠️ _I claimed to make changes but didn't call a write tool. The data was NOT changed. Tell me to actually do it._"
 
 
+# --- Response formatting ---
+
 def _clean_content(reply: str) -> str:
-    """Strip model-generated prefixes and fix markdown before adding our own prefix."""
-    import re
-    # Strip agent name/emoji prefixes the model might add
+    """Strip model-generated prefixes and fix markdown before sending."""
+    # Strip emoji prefixes the model might add
     reply = re.sub(r'^(?:🤖🔬|🤖|🔬)\s*\n?', '', reply).lstrip()
-    # Build pattern from configured agent names (escape dots for regex)
-    _admin_re = re.escape(ADMIN_AGENT_NAME).replace(r'\.', r'\.')
-    _research_re = re.escape(RESEARCH_AGENT_NAME).replace(r'\.', r'\.')
-    reply = re.sub(rf'^(?:{_admin_re}|{_research_re})\s*>?\s*\n?', '', reply, flags=re.IGNORECASE).lstrip()
+    # Strip agent name prefixes
+    _name_pat = re.escape(AGENT_NAME)
+    reply = re.sub(rf'^{_name_pat}\s*>?\s*\n?', '', reply, flags=re.IGNORECASE).lstrip()
     # Convert ### Header → *Header* (bold)
     reply = re.sub(r'^#{1,4}\s+(.+)$', r'*\1*', reply, flags=re.MULTILINE)
     # Convert ***text*** → *text*
     reply = re.sub(r'\*{3,}(.+?)\*{3,}', r'*\1*', reply, flags=re.DOTALL)
     # Convert **text** → *text* (MarkdownV2 bold)
     reply = re.sub(r'\*\*(.+?)\*\*', r'*\1*', reply)
-    # Clean up remaining 3+ asterisks
     reply = re.sub(r'\*{3,}', '*', reply)
     return reply
 
 
-async def _send_reply(update, user_text: str, reply: str, tools_used: list, mode: str = "admin"):
-    """Shared send logic: safety nets → log → escape → send."""
-    reply = _append_failure_notice(reply, tools_used)
-    reply = _append_write_hallucination_notice(reply, tools_used)
-    log_conversation(user_text, reply, tools_used, mode=mode)
-    reply = _escape_markdownv2(reply)
-    for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
-
-
 def _escape_markdownv2(reply: str) -> str:
-    """Escape special chars for Telegram MarkdownV2 (run right before sending)."""
-    import re
-    reply = re.sub(r'([.!()\-=+{}\[\]|~>#])', r'\\\1', reply)
-    return reply
+    """Escape special chars for Telegram MarkdownV2."""
+    return re.sub(r'([.!()\-=+{}\[\]|~>#])', r'\\\1', reply)
 
 
-def _detect_mode_switch(user_text: str, current_mode: str, suggested_research: bool) -> str | None:
-    """Detect if user wants to switch modes. Returns 'admin', 'research', or None.
+# --- AI conversation loop ---
 
-    Handles typos (reseerch, reserch), conflicting keywords (go back to research),
-    and confirmation words after research was suggested.
-    """
-    import re
-    t = user_text.strip().lower()
-
-    # Bare toggle commands
-    if t in ("switch", "switch back", "switch mode"):
-        return "admin" if current_mode == "research" else "research"
-    if t == "back":
-        return "admin"
-
-    # Confirmation → switch to research if it was suggested
-    if suggested_research:
-        confirm_starts = ("yes", "yeah", "yep", "sure", "ok", "okay", "do it",
-                          "go ahead", "please", "pls", "plz")
-        if any(t == w or t.startswith(w + " ") or t.startswith(w + ",") for w in confirm_starts):
-            return "research"
-
-    # Fuzzy keyword matching — built from config keywords
-    # "research" with common typos: reseerch, reserch, researh, reaserch
-    _research_kws = "|".join(re.escape(kw) for kw in RESEARCH_SWITCH_KEYWORDS)
-    research_hit = bool(re.search(rf'res\w{{0,4}}r?ch|{_research_kws}', t))
-    _admin_kws = "|".join(re.escape(kw) for kw in ADMIN_SWITCH_KEYWORDS)
-    admin_hit = bool(re.search(rf'\b(?:{_admin_kws})\b', t))
-
-    # Require a mode-switch phrase to avoid triggering on casual mentions
-    mode_phrase = bool(re.search(
-        r'\bswitch\b|\bmode\b|\bgo\s+(?:to|back)\b|\bback\s+to\b'
-        r'|\btalk\s+to\b|\blet\s+me\b|\bactivate\b|\bcan\s+(?:we|i)\s+get\b',
-        t
-    ))
-
-    if mode_phrase:
-        # Research takes priority — "go back to research" means research, not admin
-        if research_hit:
-            return "research"
-        if admin_hit:
-            return "admin"
-
-    return None
+client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
 
 
 def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = None) -> str:
@@ -915,129 +779,22 @@ def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = 
         return f"⚠️ TOOL FAILED — {name}: {e}. YOU MUST tell the user this action failed. Do NOT say it succeeded."
 
 
-# --- Grok conversation loop (OpenAI-compatible API) ---
-
-client = OpenAI(
-    api_key=AI_API_KEY,
-    base_url=AI_BASE_URL,
-)
-
-
-def _research_system_prompt() -> str:
-    """System prompt for research mode (Grok 4.20)."""
-    from zoneinfo import ZoneInfo
-    now = datetime.datetime.now(ZoneInfo("America/Toronto"))
-    return (
-        f"You are {RESEARCH_AGENT_NAME} — the research agent in LifeOS. You are NOT {ADMIN_AGENT_NAME}. "
-        f"Never say '{ADMIN_AGENT_NAME} here' or identify yourself as {ADMIN_AGENT_NAME}. "
-        f"{ADMIN_AGENT_NAME} (admin mode) handles daily operations. You handle deep reasoning. "
-        f"You have access to the same tools as {ADMIN_AGENT_NAME}. "
-        f"Do NOT include your name or any header like '{RESEARCH_AGENT_NAME} >' in your responses — the system adds an emoji identifier automatically. "
-        "IMPORTANT: Focus on the user's MOST RECENT question. Do NOT revisit older resolved topics. "
-        "Your job: factual research, precise calculations (calories, MET, exercise science, nutrition). "
-        "Show your math. Cite sources when possible. Be thorough but concise. "
-        "Do not use ### headers or *** formatting — use **bold** only. "
-        f"You have full conversation context from {ADMIN_AGENT_NAME}. "
-        "When you're done with the research task, tell the user: "
-        f"'Research complete. Say **switch back** to return to {ADMIN_AGENT_NAME}.'\n"
-        f"\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
-        f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
-    )
-
-
-def _filter_conversation(conversation: list[dict], mode: str) -> list[dict]:
-    """Build a filtered conversation for the API — each agent only sees its own responses.
-
-    - User messages: always included as-is (role: user)
-    - Same-mode assistant messages: included as role: assistant (model sees them as its own)
-    - Cross-mode assistant messages: re-labeled as role: user with agent prefix
-    - Tool messages: included only if they belong to the current mode's tool calls
-    - Handoff prompts (_handoff=True): stripped entirely
-    """
-    other_agent = RESEARCH_AGENT_NAME if mode == "admin" else ADMIN_AGENT_NAME
-    filtered = []
-    # Track which tool_call_ids belong to the current mode
-    current_mode_tc_ids = set()
-
-    for msg in conversation:
-        # Skip handoff prompts
-        if msg.get("_handoff"):
-            continue
-
-        role = msg.get("role")
-        msg_mode = msg.get("_mode")
-
-        if role == "user":
-            # User messages always pass through, without internal metadata
-            clean = {"role": "user", "content": msg["content"]}
-            filtered.append(clean)
-
-        elif role == "assistant":
-            if msg_mode == mode or msg_mode is None:
-                # Same mode — include as assistant (model's own words)
-                clean = {"role": "assistant", "content": msg.get("content", "")}
-                if msg.get("tool_calls"):
-                    clean["tool_calls"] = msg["tool_calls"]
-                    for tc in msg["tool_calls"]:
-                        current_mode_tc_ids.add(tc["id"])
-                filtered.append(clean)
-            else:
-                # Cross-mode — re-label as user message with agent prefix
-                content = msg.get("content", "")
-                if content:
-                    filtered.append({
-                        "role": "user",
-                        "content": f"[{other_agent} said]: {content}",
-                    })
-                # Drop cross-mode tool_calls — they'd confuse the model
-
-        elif role == "tool":
-            # Only include tool results for same-mode tool calls
-            tc_id = msg.get("tool_call_id")
-            if tc_id in current_mode_tc_ids:
-                filtered.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": msg.get("content", ""),
-                })
-
-    return filtered
-
-
-def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admin",
-           is_handoff: bool = False) -> tuple[str, list]:
-    """Send user message to AI, handle tool calls, return (reply, tool_log).
-
-    user_content can be a plain string or a list of content parts (for multimodal
-    messages containing images, e.g. when a PDF is uploaded).
-    mode: "admin" or "research"
-    is_handoff: if True, marks the user message as a handoff prompt (stripped from
-                future cross-mode conversation views)
-    """
-    msg_entry = {"role": "user", "content": user_content, "_mode": mode}
-    if is_handoff:
-        msg_entry["_handoff"] = True
-    conversation.append(msg_entry)
+def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, list]:
+    """Send user message to AI, handle tool calls, return (reply, tool_log)."""
+    conversation.append({"role": "user", "content": user_content})
     tool_log = []
-
-    active_client = research_client if mode == "research" else client
-    active_model = RESEARCH_MODEL if mode == "research" else MODEL
-    system_prompt = _research_system_prompt() if mode == "research" else _build_system_prompt()
+    system_prompt = _build_system_prompt()
 
     for _ in range(MAX_TOOL_ROUNDS):
-        # Filter conversation so each agent only sees its own assistant responses
-        api_messages = [{"role": "system", "content": system_prompt}] + _filter_conversation(conversation, mode)
-
-        response = active_client.chat.completions.create(
-            model=active_model,
+        response = client.chat.completions.create(
+            model=MODEL,
             max_tokens=4096,
-            messages=api_messages,
+            messages=[{"role": "system", "content": system_prompt}] + conversation,
             tools=TOOLS,
         )
 
         msg = response.choices[0].message
-        # Build assistant message for history — tagged with mode
-        assistant_msg = {"role": "assistant", "content": msg.content or "", "_mode": mode}
+        assistant_msg = {"role": "assistant", "content": msg.content or ""}
         if msg.tool_calls:
             assistant_msg["tool_calls"] = [
                 {
@@ -1052,7 +809,6 @@ def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admi
         if not msg.tool_calls:
             return msg.content or "", tool_log
 
-        # Execute tools and feed results back
         for tc in msg.tool_calls:
             fn_name = tc.function.name
             fn_args = json.loads(tc.function.arguments)
@@ -1064,7 +820,6 @@ def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admi
                 "role": "tool",
                 "tool_call_id": tc.id,
                 "content": result,
-                "_mode": mode,
             })
 
     return "I hit the tool call limit. Please try a simpler request.", tool_log
@@ -1073,61 +828,45 @@ def ask_ai(user_content: str | list, conversation: list[dict], mode: str = "admi
 # --- Conversation state and logging ---
 
 conversations: dict[int, list] = {}
-# Track which mode each chat is in: "admin" (default, GPT-4.1-nano) or "research" (Grok 4.20)
-chat_mode: dict[int, str] = {}
-# Track if last admin message suggested research mode (so "yes" triggers switch)
-research_suggested: dict[int, bool] = {}
-
-# Research client (Grok 4.20)
-research_client = OpenAI(api_key=RESEARCH_API_KEY, base_url=RESEARCH_BASE_URL)
 
 
-def load_conversation_from_logs() -> tuple[list[dict], str]:
-    """Reload today's conversation from log with full assistant responses.
-
-    Returns (conversation, last_mode) — last_mode preserves the agent mode across restarts.
-    """
+def load_conversation_from_logs() -> list[dict]:
+    """Reload today's conversation from log."""
     today = _today()
     log_file = LOG_DIR / f"{today}.jsonl"
     conv = []
-    last_mode = "admin"
     if not log_file.exists():
-        return conv, last_mode
+        return conv
     try:
         for line in log_file.read_text().strip().split("\n"):
             if not line:
                 continue
             entry = json.loads(line)
-            last_mode = entry.get("mode", "admin")
             user_msg = entry.get("user", "")
             assistant_msg = entry.get("assistant", "")
-            # Strip emoji prefixes from history so model doesn't copy them
             if assistant_msg:
-                import re as _re
-                assistant_msg = _re.sub(r'^[🤖🔬\s]+\n?', '', assistant_msg).lstrip()
-                _admin_pat = _re.escape(ADMIN_AGENT_NAME)
-                _research_pat = _re.escape(RESEARCH_AGENT_NAME)
-                assistant_msg = _re.sub(rf'^(?:{_admin_pat}|{_research_pat})\s*>\s*\n?', '', assistant_msg, flags=_re.IGNORECASE).lstrip()
+                # Strip emoji/name prefixes from history
+                assistant_msg = re.sub(r'^[🤖🔬\s]+\n?', '', assistant_msg).lstrip()
+                _name_pat = re.escape(AGENT_NAME)
+                assistant_msg = re.sub(rf'^{_name_pat}\s*>\s*\n?', '', assistant_msg, flags=re.IGNORECASE).lstrip()
             if user_msg:
-                conv.append({"role": "user", "content": user_msg, "_mode": last_mode})
+                conv.append({"role": "user", "content": user_msg})
             if assistant_msg:
-                conv.append({"role": "assistant", "content": assistant_msg, "_mode": last_mode})
+                conv.append({"role": "assistant", "content": assistant_msg})
     except Exception as e:
         log.warning("Failed to load conversation history: %s", e)
     if len(conv) > MAX_CONVERSATION_MESSAGES:
         conv = conv[-MAX_CONVERSATION_MESSAGES:]
-    log.info("Loaded %d messages from today's log (last mode: %s)", len(conv), last_mode)
-    return conv, last_mode
+    log.info("Loaded %d messages from today's log", len(conv))
+    return conv
 
 
-def log_conversation(user_text: str, reply: str, tool_calls: list | None = None, mode: str = "admin"):
+def log_conversation(user_text: str, reply: str, tool_calls: list | None = None):
     today = _today()
     log_file = LOG_DIR / f"{today}.jsonl"
-    active_model = RESEARCH_MODEL if mode == "research" else MODEL
     entry = {
         "ts": datetime.datetime.now().isoformat(),
-        "model": active_model,
-        "mode": mode,
+        "model": MODEL,
         "user": user_text,
         "assistant": reply,
     }
@@ -1135,6 +874,16 @@ def log_conversation(user_text: str, reply: str, tool_calls: list | None = None,
         entry["tools"] = tool_calls
     with open(log_file, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+async def _send_reply(update, user_text: str, reply: str, tools_used: list):
+    """Shared send logic: monitoring → log → escape → send."""
+    reply = _append_failure_notice(reply, tools_used)
+    reply = _append_write_hallucination_notice(reply, tools_used)
+    log_conversation(user_text, reply, tools_used)
+    reply = _escape_markdownv2(reply)
+    for i in range(0, len(reply), 4096):
+        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
 
 
 # --- Telegram handlers ---
@@ -1155,185 +904,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     conv = conversations.get(cid)
     if conv is None:
-        conv, last_mode = load_conversation_from_logs()
+        conv = load_conversation_from_logs()
         conversations[cid] = conv
-        if cid not in chat_mode:
-            chat_mode[cid] = last_mode
 
-    mode = chat_mode.get(cid, "admin")
-
-    # Mode switching — centralized detection with typo tolerance
-    user_lower = user_text.strip().lower()
-    switch_target = _detect_mode_switch(user_text, mode, research_suggested.get(cid, False))
-
-    # Switch to research (from admin)
-    if switch_target == "research" and mode == "admin":
-        research_suggested[cid] = False
-        chat_mode[cid] = "research"
-        mode = "research"
-        handoff = (
-            f"The user just switched from {ADMIN_AGENT_NAME} (admin mode) to you (research mode). "
-            f"Their message: \"{user_text}\"\n"
-            f"Review the conversation history and focus on the MOST RECENT topic only. "
-            f"Do NOT revisit older resolved questions — only address what the user is currently asking about. "
-            f"Start working immediately — do not introduce yourself or ask what to do."
-        )
-        if len(conv) > MAX_CONVERSATION_MESSAGES:
-            conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
-        tools_used = []
-        try:
-            reply, tools_used = await asyncio.to_thread(ask_ai, handoff, conv, mode="research", is_handoff=True)
-        except Exception as e:
-            log.exception("AI API error")
-            reply = f"Something went wrong: {e}"
-        reply = _clean_content(reply)
-        if not reply.startswith(ADMIN_EMOJI):
-            reply = RESEARCH_EMOJI + "\n" + reply
-        await _send_reply(update, user_text, reply, tools_used, mode="research")
-        return
-
-    # Switch to admin (from research)
-    if switch_target == "admin" and mode == "research":
-        chat_mode[cid] = "admin"
-        reply = f"{ADMIN_EMOJI}\nBack in admin mode\\. What\\'s next?"
-        log_conversation(user_text, reply, mode="admin")
-        await update.message.reply_text(reply, parse_mode="MarkdownV2")
-        return
-
-    # One-shot research for cardio exercises (admin mode only) — stays in admin after
-    cardio_keywords = ("treadmill", "cycling", "bike", "spin", "hiit", "jogging", "running", "swimming", "elliptical", "rowing machine", "stairmaster", "jump rope")
-    if mode == "admin" and any(kw in user_lower for kw in cardio_keywords):
-        # Check if it looks like exercise logging (has numbers like duration/speed/distance)
-        import re
-        has_numbers = bool(re.search(r'\d', user_text))
-        if has_numbers:
-            # One-shot: use research model for this response, but do NOT change chat_mode
-            cardio_prompt = (
-                f"The user logged a cardio exercise: \"{user_text}\"\n\n"
-                "1. Pull their latest weight from Body Metrics using read_sheet.\n"
-                "2. Calculate the precise NET calories burned using the ACSM metabolic equation. "
-                "Show your full math: VO2, gross calories, baseline subtraction, net result. "
-                "Cite the MET source.\n"
-                "3. Present the breakdown and ask: 'Approve this to log to the Cardio tab?'\n"
-                "4. Do NOT log until the user says approved.\n"
-                f"5. After logging, say: 'Done! You are still in admin mode with {ADMIN_AGENT_NAME}.'"
-            )
-            if len(conv) > MAX_CONVERSATION_MESSAGES:
-                conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
-            tools_used = []
-            try:
-                reply, tools_used = await asyncio.to_thread(ask_ai, cardio_prompt, conv, mode="research", is_handoff=True)
-            except Exception as e:
-                log.exception("AI API error")
-                reply = f"Something went wrong: {e}"
-            if not reply.startswith(ADMIN_EMOJI):
-                reply = RESEARCH_EMOJI + "\n" + reply
-            await _send_reply(update, user_text, reply, tools_used, mode="research")
-            # Mode stays admin — one-shot research, no permanent switch
-            return
-
-    # Trim conversation history
     if len(conv) > MAX_CONVERSATION_MESSAGES:
         conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
 
     tools_used = []
     try:
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv, mode=mode)
+        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
     except Exception as e:
         log.exception("AI API error")
         reply = f"Something went wrong: {e}"
 
-    # Clean model-generated prefixes and markdown before adding our prefix
     reply = _clean_content(reply)
+    reply = AGENT_EMOJI + "\n" + reply
 
-    # Prefix responses with agent emoji
-    if mode == "research" and not reply.startswith(ADMIN_EMOJI):
-        reply = RESEARCH_EMOJI + "\n" + reply
-    elif mode == "admin":
-        reply = ADMIN_EMOJI + "\n" + reply
-
-    # If admin mode claimed a write but didn't call a write tool, auto-escalate to Grok
-    if mode == "admin":
-        import re as _re
-        _action_phrases = (
-            r"i(?:'ve| have) (?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
-            r"(?:updated|fixed|corrected|logged|cleared|deleted|removed|saved|added|appended) (?:the|your|it|row|entry|data)",
-            r"(?:executing|done|complete).*(?:delet|clear|remov|updat|fix|log|writ|sav)",
-            r"let me (?:correct|fix|update|delete|remove|clear|log|save|add)",
-            r"i (?:will|can|shall)[\w\s]{0,20}(?:correct|fix|update|delete|remove|clear|log|save|add)",
-            r"the (?:sheet|tab|row|entry|data) (?:has been|is now|was) (?:updated|fixed|corrected|cleared|deleted|removed|saved)",
-        )
-        # Also detect refusals — admin saying it can't do something it has tools for
-        _refusal_phrases = (
-            r"(?:cannot|can't|don't|do not)[\w\s]{0,10}(?:access|identify|find|modify|delete|remove|clear)",
-            r"(?:don't|do not) have (?:\w+ )?(?:capability|ability|permission|access)",
-            r"(?:provide|give) (?:me )?(?:the )?row number",
-            r"without the row number",
-            r"(?:don't|do not) have direct access",
-        )
-        _reply_lower = reply.lower()
-        claimed_write = any(_re.search(p, _reply_lower) for p in _action_phrases)
-        refused = any(_re.search(p, _reply_lower) for p in _refusal_phrases)
-        did_write = any(t.get("tool") in WRITE_TOOLS for t in tools_used)
-        if (claimed_write or refused) and not did_write:
-            log.info("Admin claimed write without tool call — one-shot escalation to Grok")
-            # One-shot: use research model to execute, but stay in admin mode
-            escalation_prompt = (
-                f"Admin mode failed to execute a write action. The user said: \"{user_text}\"\n"
-                "Admin's response claimed changes were made but no write tool was called.\n"
-                "Please actually do what the user asked — use the appropriate tools (write_sheet, clear_row, log_workout, log_cardio, etc.).\n"
-                f"After completing, say: 'Done.'"
-            )
-            try:
-                reply, tools_used = await asyncio.to_thread(ask_ai, escalation_prompt, conv, mode="research", is_handoff=True)
-                if not reply.startswith(ADMIN_EMOJI):
-                    reply = RESEARCH_EMOJI + "\n" + reply
-                # Log as research but keep chat_mode as admin — one-shot, no permanent switch
-                mode = "research"  # only for this response's logging/prefix
-            except Exception as e:
-                log.exception("Grok escalation failed")
-                reply += "\n\n⚠️ _Auto-escalation to Grok failed. Say **switch to research** to try manually._"
-
-        # If admin hallucinated a mode switch in its reply, one-shot re-run with research
-        if mode == "admin":
-            _mode_halluc_phrases = (
-                r'research\s+mode\s+activ',
-                r'(?:switching|switched)\s+to\s+research',
-                r'i\s+am\s+(?:now\s+)?in\s+(?:full\s+)?research',
-            )
-            if any(_re.search(p, _reply_lower) for p in _mode_halluc_phrases):
-                log.info("Admin hallucinated mode switch — one-shot research re-run")
-                # One-shot: don't change chat_mode, just use research for this response
-                mode = "research"  # only for this response's logging/prefix
-                try:
-                    handoff = (
-                        f"The user said: \"{user_text}\"\n"
-                        "Focus on their most recent topic. Start working immediately."
-                    )
-                    reply, tools_used = await asyncio.to_thread(ask_ai, handoff, conv, mode="research", is_handoff=True)
-                    reply = _clean_content(reply)
-                    if not reply.startswith(ADMIN_EMOJI):
-                        reply = RESEARCH_EMOJI + "\n" + reply
-                except Exception as e:
-                    log.exception("Research mode fallback failed")
-                    reply = f"{RESEARCH_EMOJI}\nResearch mode active. What would you like researched?"
-
-        # If admin mode estimated research answers (and didn't escalate), nudge
-        # But not if it read from the sheet — that's reporting, not estimating
-        if mode == "admin":
-            research_keywords = ("calori", "met value", "met ", "kcal", "burn rate", "bmr", "tdee", "macro")
-            used_read = any(t.get("tool") == "read_sheet" for t in tools_used)
-            if not used_read and any(kw in reply.lower() for kw in research_keywords):
-                reply += "\n\n⚠️ _This is an estimate. Say **switch to research** for a precise, research-backed answer from Grok 4.20._"
-                research_suggested[cid] = True
-
-    # If reply suggests switching to research, flag so "yes" triggers it
-    if mode == "admin" and "switch to research" in reply.lower():
-        research_suggested[cid] = True
-    elif mode == "admin":
-        research_suggested[cid] = False
-
-    await _send_reply(update, user_text, reply, tools_used, mode=mode)
+    await _send_reply(update, user_text, reply, tools_used)
 
 
 async def handle_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1344,12 +931,7 @@ async def handle_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle file uploads — download and pass to AI.
-
-    PDFs are converted to images and sent as multimodal vision content so the AI
-    can actually read the document (e.g. DEXA scans, blood work). Other files are
-    passed as text references.
-    """
+    """Handle file uploads — PDFs get vision treatment."""
     if not update.message or not update.effective_chat:
         return
     if update.effective_chat.id != CHAT_ID:
@@ -1367,30 +949,24 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     caption = update.message.caption or ""
 
-    # For PDFs: convert to images and send as multimodal content so AI can see them
     if filename.lower().endswith(".pdf"):
         try:
             b64_images, total_pages = _pdf_to_base64_images(str(local_path), first_page=1, last_page=5)
             remaining = total_pages - len(b64_images)
-            remaining_note = f" ({remaining} more pages available — use read_pdf to continue)" if remaining > 0 else ""
+            remaining_note = f" ({remaining} more pages — use read_pdf to continue)" if remaining > 0 else ""
             content_parts = [
-                {"type": "text", "text": f"[PDF uploaded: {filename} saved to {local_path} — showing pages 1-{len(b64_images)} of {total_pages}{remaining_note}] {caption}".strip()},
+                {"type": "text", "text": f"[PDF uploaded: {filename} — pages 1-{len(b64_images)} of {total_pages}{remaining_note}] {caption}".strip()},
             ]
             for b64 in b64_images:
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-                })
+                content_parts.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
             user_content = content_parts
-            log.info("PDF converted to %d page image(s) for AI vision", len(b64_images))
         except Exception as e:
-            log.exception("PDF conversion failed, falling back to text-only")
-            user_content = f"[File uploaded: {filename} saved to {local_path} (PDF conversion failed: {e})] {caption}".strip()
+            log.exception("PDF conversion failed")
+            user_content = f"[File uploaded: {filename} (PDF conversion failed: {e})] {caption}".strip()
     else:
         user_content = f"[File uploaded: {filename} saved to {local_path}] {caption}".strip()
 
-    # For logging, always store the text version
-    user_text_for_log = f"[File uploaded: {filename} saved to {local_path}] {caption}".strip()
+    user_text_for_log = f"[File uploaded: {filename}] {caption}".strip()
 
     conv = conversations.setdefault(CHAT_ID, [])
     if len(conv) > MAX_CONVERSATION_MESSAGES:
@@ -1398,16 +974,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     tools_used = []
     try:
-        mode = chat_mode.get(CHAT_ID, "admin")
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_content, conv, mode=mode)
+        reply, tools_used = await asyncio.to_thread(ask_ai, user_content, conv)
     except Exception as e:
         log.exception("AI API error")
         reply = f"Something went wrong: {e}"
 
-    mode = chat_mode.get(CHAT_ID, "admin")
-    if mode == "research" and not reply.startswith(ADMIN_EMOJI):
-        reply = RESEARCH_EMOJI + "\n" + reply
-    await _send_reply(update, user_text_for_log, reply, tools_used, mode=mode)
+    reply = _clean_content(reply)
+    reply = AGENT_EMOJI + "\n" + reply
+
+    await _send_reply(update, user_text_for_log, reply, tools_used)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1417,7 +992,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != CHAT_ID:
         return
 
-    photo = update.message.photo[-1]  # largest size
+    photo = update.message.photo[-1]
     file = await photo.get_file()
     filename = f"photo_{_today()}_{photo.file_unique_id}.jpg"
     local_path = UPLOAD_DIR / filename
@@ -1425,20 +1000,19 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log.info("Downloaded photo: %s", local_path)
 
     caption = update.message.caption or ""
-    user_text = f"[Photo uploaded: {filename} saved to {local_path}] {caption}".strip()
+    user_text = f"[Photo uploaded: {filename}] {caption}".strip()
 
     conv = conversations.setdefault(CHAT_ID, [])
     tools_used = []
     try:
-        mode = chat_mode.get(CHAT_ID, "admin")
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv, mode=mode)
+        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
     except Exception as e:
         reply = f"Something went wrong: {e}"
 
-    mode = chat_mode.get(CHAT_ID, "admin")
-    if mode == "research" and not reply.startswith(ADMIN_EMOJI):
-        reply = RESEARCH_EMOJI + "\n" + reply
-    await _send_reply(update, user_text, reply, tools_used, mode=mode)
+    reply = _clean_content(reply)
+    reply = AGENT_EMOJI + "\n" + reply
+
+    await _send_reply(update, user_text, reply, tools_used)
 
 
 def main():
