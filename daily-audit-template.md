@@ -100,7 +100,28 @@ Track whether the bot is improving over time. No guardrails added — just obser
 
 ---
 
-## 8. Guardrails Added (if any)
+## 8. Over-Restriction Audit
+
+Are we blocking the models from reasoning? Code-level rules that do what the model should do are restrictions. Monitoring that flags issues without intervening is not.
+
+| Code/rule | What it does | Restricts model? | Should the model handle this instead? |
+|-----------|-------------|-----------------|--------------------------------------|
+| (scan bot.py for regex, hardcoded logic, auto-interventions) | (describe) | YES/NO | YES/NO — why |
+
+**Check for:**
+- Regex or keyword matching that replaces model reasoning (e.g., intent detection the model could do via a tool)
+- Auto-escalation that silently replaces the model's response with another model's response
+- System prompt rules that tell the model NOT to do something instead of giving it a tool to do it properly
+- Conversation filtering or stripping that hides context the model needs to reason well
+- Safety nets that intervene (change flow) vs safety nets that monitor (flag to user)
+
+**Principle:** Monitor heavily, intervene rarely. If a rule exists because the model hallucinated, ask: was the hallucination caused by bad architecture (conversation soup, missing tools) or bad model quality? Fix the architecture first. Only add code-level restrictions if the model genuinely can't handle it after architecture is clean.
+
+**Action:** If any restriction is found that the model could handle via a tool or cleaner prompt, flag it for removal in section 9 backfills.
+
+---
+
+## 9. Guardrails Added (if any)
 
 Only add guardrails when a pattern repeats. Document what was added and why.
 
@@ -116,4 +137,5 @@ Only add guardrails when a pattern repeats. Document what was added and why.
 - **Critical failures:** (count)
 - **Backfills needed:** (count)
 - **Guardrails added:** (count)
+- **Over-restrictions found:** (count — rules that should be replaced by model reasoning + tools)
 - **Model trend:** (improving / stable / declining)
