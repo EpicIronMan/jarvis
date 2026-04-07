@@ -1,0 +1,4 @@
+{"date":"2026-04-07","key":"no_convo_log","msg":"No conversation log for today (2026-04-07)"}
+{"date":"2026-04-07","key":"hallucinated_saves_2026-04-06","msg":"Procedure: Bot promised more saves than executed (9 claimed, 3 done)"}
+{"date":"2026-04-07","key":"git_broken","msg":"Architecture: Git repo broken or missing"}
+{"date":"2026-04-07","key":"git_remote_unreachable","msg":"Cannot reach git remote — backup is not updating"}

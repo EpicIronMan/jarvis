@@ -3,3 +3,4 @@
 /home/openclaw/lifeos/qa-check.sh: line 99: [: 0
 0: integer expression expected
 QA alert sent: \n- Architecture: Git repo broken or missing
+QA alert sent: \n- No conversation log for today (2026-04-07)\n- Procedure: Bot promised more saves than executed (9 claimed, 3 done)\n- Architecture: Git repo broken or missing\n- Cannot reach git remote — backup is not updating
