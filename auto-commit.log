@@ -112,3 +112,7 @@ Committed and pushed.
 [master 2100bb8] auto: snapshot 2026-04-07
  2 files changed, 4 insertions(+)
 Committed and pushed.
+[master aad7544] auto: snapshot 2026-04-07
+ 3 files changed, 8 insertions(+)
+ create mode 100644 qa-hits.jsonl
+Committed and pushed.
