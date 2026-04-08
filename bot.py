@@ -92,7 +92,6 @@ TOOLS = [
             "name": "log_workout",
             "description": (
                 "Log workout exercises to the Training Log Google Sheet. "
-                "Log immediately when the user reports exercises — do not wait for confirmation. "
                 "Columns: Date | Exercise | Sets | Reps | Weight (lbs) | RPE | Volume (lbs) | Session Type | Data Source"
             ),
             "parameters": {
@@ -183,7 +182,7 @@ TOOLS = [
                     "duration_min": {"type": "number", "description": "Duration in minutes"},
                     "speed": {"type": "number", "description": "Speed (mph or equivalent), 0 if N/A"},
                     "incline": {"type": "number", "description": "Incline %, 0 if flat"},
-                    "net_calories": {"type": "number", "description": "Net calories burned (gross minus baseline). Must be research-backed, not estimated."},
+                    "net_calories": {"type": "number", "description": "Net calories burned (gross minus baseline)"},
                     "met_used": {"type": "number", "description": "MET value used for the calculation"},
                     "notes": {"type": "string", "default": "", "description": "Calculation breakdown, formula, or other context"},
                 },
@@ -216,11 +215,7 @@ TOOLS = [
             "description": (
                 "Write to any cell or range in the Google Sheet. Use for editing cells, "
                 "adding columns, or fixing data. Requires a reason explaining WHY the "
-                "change is being made — this gets written to the Notes column of the "
-                "affected row so any AI reading the sheet later understands the context. "
-                "For structural changes (new columns, deleted rows, changed layouts), "
-                "tell the user to have Claude Code update architecture.md and push to GitHub. "
-                "IMPORTANT: Show the user what you're about to write and get APPROVE before calling this."
+                "change is being made."
             ),
             "parameters": {
                 "type": "object",
@@ -252,9 +247,7 @@ TOOLS = [
             "name": "clear_row",
             "description": (
                 "Clear (blank out) a row or range in the Google Sheet. Use this to remove "
-                "bad data, duplicates, or entries that belong in a different tab. "
-                "First use read_sheet to find the row, then clear it. "
-                "IMPORTANT: You MUST call this tool to actually clear data — do NOT claim you cleared something without calling this."
+                "bad data, duplicates, or entries that belong in a different tab."
             ),
             "parameters": {
                 "type": "object",
@@ -742,19 +735,11 @@ def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> st
 # --- Response formatting ---
 
 def _clean_content(reply: str) -> str:
-    """Strip model-generated prefixes and fix markdown before sending."""
-    # Strip emoji prefixes the model might add
+    """Minimal cleanup — only things the model can't control."""
+    # Strip emoji prefixes (system adds them after, model shouldn't add its own)
     reply = re.sub(r'^(?:🤖🔬|🤖|🔬)\s*\n?', '', reply).lstrip()
-    # Strip agent name prefixes
     _name_pat = re.escape(AGENT_NAME)
     reply = re.sub(rf'^{_name_pat}\s*>?\s*\n?', '', reply, flags=re.IGNORECASE).lstrip()
-    # Convert ### Header → *Header* (bold)
-    reply = re.sub(r'^#{1,4}\s+(.+)$', r'*\1*', reply, flags=re.MULTILINE)
-    # Convert ***text*** → *text*
-    reply = re.sub(r'\*{3,}(.+?)\*{3,}', r'*\1*', reply, flags=re.DOTALL)
-    # Convert **text** → *text* (MarkdownV2 bold)
-    reply = re.sub(r'\*\*(.+?)\*\*', r'*\1*', reply)
-    reply = re.sub(r'\*{3,}', '*', reply)
     return reply
 
 
@@ -778,7 +763,7 @@ def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = 
         return fn(input_data)
     except Exception as e:
         log.exception("Tool %s failed", name)
-        return f"⚠️ TOOL FAILED — {name}: {e}. YOU MUST tell the user this action failed. Do NOT say it succeeded."
+        return f"⚠️ TOOL FAILED — {name}: {e}"
 
 
 def _api_call_with_retry(system_prompt: str, conversation: list[dict]) -> object:

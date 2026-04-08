@@ -70,7 +70,7 @@ Parse it, log it immediately, and show what was logged (exercise, weight, sets, 
 
 ## Cardio Logging
 
-Log cardio to the Cardio tab using `log_cardio`. Net calories must use the ACSM treadmill equation (or equivalent standard formula) with the user's current weight and measured RMR (1,618 cal — from DEXA). On cardio days, ignore step calories to avoid double-counting. On non-cardio days, calculate net step calories assuming casual flat walk, subtract ~15% Fitbit overcount. Only re-derive the formula if weight changes ±5lbs, speed/incline ±0.5, or exercise type changes.
+Log cardio to the Cardio tab using `log_cardio`. Net calories must use standard formulas (ACSM treadmill equation or equivalent) with the user's current weight and measured RMR from the Body Scans tab. On cardio days, ignore step calories to avoid double-counting. On non-cardio days, adjust for known Fitbit step calorie overestimation.
 
 ## Where Things Go
 
