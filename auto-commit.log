@@ -194,3 +194,7 @@ Committed and pushed.
 [master fa76876] auto: snapshot 2026-04-08
  6 files changed, 66 insertions(+), 62 deletions(-)
 Committed and pushed.
+[master 4c47ed8] auto: snapshot 2026-04-08
+ 2 files changed, 7 insertions(+)
+ create mode 100644 soul-proposals.jsonl
+Committed and pushed.
