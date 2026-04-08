@@ -269,7 +269,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "save_memory",
-            "description": "Append an entry to memory.md — the single file where all remembered info is stored. Include the date and context.",
+            "description": "Append an entry to memory.md. Use only for user decisions, routine changes, and personal preferences. NOT for rules, algorithms, or formulas — those belong in soul.md (tell user to have Claude Code update it). Include the date and context.",
             "parameters": {
                 "type": "object",
                 "properties": {
