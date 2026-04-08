@@ -53,6 +53,24 @@ def load_memory():
     return path.read_text().strip()
 
 
+def count_pending_proposals():
+    """Count pending soul proposals awaiting review."""
+    proposals_path = pathlib.Path("/home/openclaw/lifeos/soul-proposals.jsonl")
+    if not proposals_path.exists():
+        return 0
+    count = 0
+    for line in proposals_path.read_text().strip().split("\n"):
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+            if entry.get("status") in ("pending", "awaiting_user"):
+                count += 1
+        except json.JSONDecodeError:
+            continue
+    return count
+
+
 def call_ai(prompt, system):
     """Call the AI API (OpenAI-compatible)."""
     from openai import OpenAI
@@ -95,6 +113,7 @@ def main():
     recovery = gog_get("Recovery", 3)
     body_scans = gog_get("Body Scans", 2)
     memory = load_memory()
+    pending_proposals = count_pending_proposals()
     soul = SOUL_PATH.read_text() if SOUL_PATH.exists() else ""
 
     system_prompt = soul + f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
@@ -109,6 +128,7 @@ def main():
 6. Any goals or benchmarks from memory files to check progress against
 7. One specific recommendation for today
 8. A motivational line
+9. Pending soul proposals: {pending_proposals} (if >0, remind me to review them — reply APPROVE or REJECT with the ID)
 
 Be concise but human. This is read on a phone first thing in the morning.
 
@@ -129,6 +149,9 @@ Be concise but human. This is read on a phone first thing in the morning.
 
 --- MEMORY FILES ---
 {memory}
+
+--- PENDING SOUL PROPOSALS ---
+{pending_proposals} proposal(s) awaiting review
 """
 
     # Generate brief

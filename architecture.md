@@ -1,6 +1,6 @@
 # J.A.R.V.I.S. — Architecture Document
 
-Last updated: 2026-04-06
+Last updated: 2026-04-08
 
 ## Maintenance Rule
 
@@ -144,6 +144,9 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- lifeos-bot.service              # systemd unit file (canonical copy)
 |-- requirements.txt                # Python deps: openai, python-telegram-bot
 |-- openclaw.env.example            # Env var template (no real secrets)
+|-- soul-proposals.jsonl             # Pending/processed soul.md change proposals
+|-- review-soul-proposals.py        # Daily reviewer for soul proposals (8pm ET cron)
+|-- audit-state.json                # Bookmark state for audit tiers (daily/weekly/monthly)
 |-- .gitignore                      # Excludes logs/, uploads/, venv/
 |-- memory/                         # AI-writable persistent state (markdown files)
 |-- logs/                           # Conversation logs YYYY-MM-DD.jsonl (gitignored)
@@ -177,7 +180,7 @@ The entire application. ~1,035 lines of Python. Single agent, single model, sing
 
 **Agent identity:** `AGENT_NAME` and `AGENT_EMOJI` env vars. Default: J.A.R.V.I.S. / 🤖. Change name without touching code.
 
-**14 tools:** log_workout, log_cardio, log_weight, log_nutrition, read_sheet, write_sheet, clear_row, save_memory, read_memory, upload_to_drive, list_drive, download_from_drive, read_pdf, sync_fitbit
+**15 tools:** log_workout, log_cardio, log_weight, log_nutrition, read_sheet, write_sheet, clear_row, save_memory, propose_soul_change, read_memory, upload_to_drive, list_drive, download_from_drive, read_pdf, sync_fitbit
 
 **Monitoring (passive — flags issues, never intervenes):**
 - `_append_failure_notice` — if tool errors aren't surfaced in reply
@@ -196,12 +199,14 @@ The entire application. ~1,035 lines of Python. Single agent, single model, sing
 **Runs as:** systemd service `lifeos-bot` under user `openclaw`
 **Cost:** Grok 4.20 ~$2/$6 per MTok. Plan to test cheaper models (GPT-4.1-mini) once architecture is proven stable.
 
-### 2. Morning Brief Cron (`morning-brief.sh`)
+### 2. Morning Brief Cron (`morning-brief-ai.py`)
 
-Standalone bash script, completely independent of the bot. Sends a daily Telegram message at 7am ET with:
+AI-powered morning brief, completely independent of the bot. Sends a daily Telegram message at 7am ET with:
 - Today's workout from the routine
 - Weight goal vs latest weigh-in (pulled from Google Sheets via gog)
-- A motivational quote
+- Nutrition/recovery summary
+- Pending soul proposals count (reminds user to review if >0)
+- A motivational line
 
 **Schedule:** `CRON_TZ=America/Toronto 0 7 * * *` (root crontab)
 **Dedup:** Lock file at `/tmp/morning-brief-YYYY-MM-DD.sent`
@@ -293,6 +298,7 @@ Any provider with an OpenAI-compatible chat completions API works with zero code
 | `0 7 * * *` ET | `morning-brief.sh` | Daily Telegram morning brief |
 | `0 * * * *` | `auto-commit.sh` | Hourly git snapshot |
 | `30 8 * * *` ET | `qa-check.sh` | Daily integrity check (alerts only on failure) |
+| `0 20 * * *` ET | `review-soul-proposals.py` | Review pending soul proposals, send to user for APPROVE/REJECT |
 | `0 9 1 * *` ET | `monthly-audit.sh` | Monthly architecture audit report |
 
 ## Service Management
@@ -359,6 +365,7 @@ Every conversation log entry includes a `tools` array showing exactly which tool
 | 21 | Memory file permissions | memory.md not owned by openclaw — bot can't write | Catches permission drift |
 | 22 | Said-vs-did (log/save claims vs tool calls) | Bot claimed to log/save but no matching tool call exists | Catches action hallucinations |
 | 23 | Exercise count mismatch | Bot discussed logging exercises but no log_workout calls found | Catches missed logging |
+| 24 | Stale soul proposals | >5 pending/awaiting proposals in soul-proposals.jsonl | Catches review pipeline failures |
 | 9a | Empty directories | Orphaned folders from old features | Orphan detection |
 | 9b | Old openclaw service enabled | Forgotten service still running | Orphan detection |
 | 9c | Stale memory files (30d+) | Dead memory no one references | Orphan detection |
@@ -405,6 +412,41 @@ If the bot consistently does something outside the defined procedures:
 ### Procedures (consolidated into `soul.md` on 2026-04-07)
 
 Previously a separate file (`procedures.md`). Consolidated into soul.md because having operational rules in multiple files caused drift — the bot would follow one file's rules while violating another's. Now soul.md is the single source of truth for all bot behavior, data source rules, and operational patterns.
+
+### Soul Proposal Pipeline
+
+**What:** A governance layer for soul.md changes. Instead of the bot telling the user "have Claude Code update soul.md," it writes a structured proposal to `soul-proposals.jsonl`. An AI reviewer checks for conflicts/redundancy, then the user approves or rejects via Telegram.
+
+**Why:** soul.md is the bot's behavioral core. Uncontrolled edits risk breaking established rules. The "tell the user" pattern lost directives (user forgets, context lost). The pipeline captures immediately, reviews for conflicts, and keeps the user as final authority.
+
+**Flow:**
+```
+User gives directive → Bot calls propose_soul_change → soul-proposals.jsonl (status: pending)
+                                                              |
+8pm ET cron → review-soul-proposals.py → AI reviews → Telegram message (status: awaiting_user)
+                                                              |
+User replies APPROVE/REJECT <id> → bot.py handles → soul.md updated (or not)
+```
+
+**Routing logic (in soul.md):** The bot distinguishes between soul material (behavioral rules, algorithms, communication style) and memory material (facts, preferences, decisions). When unsure, defaults to memory — easier to promote later.
+
+**Audit (Section 5.5 in daily-audit-template.md):** Three tiers verify routing correctness:
+- Daily: incremental log read from bookmark, check each directive was routed correctly
+- Weekly: 7-day pattern scan for repeated instructions, inconsistent rule-following
+- Monthly: deep review comparing soul.md against actual usage, dead rules, drift
+
+**Connects to:**
+- `bot.py` — propose_soul_change tool + APPROVE/REJECT handler
+- `soul.md` — approved proposals appended here + routing logic in "Where Things Go"
+- `morning-brief-ai.py` — pending count shown in morning brief
+- `daily-audit-template.md` — Section 5.5 verifies routing correctness
+- `qa-check.sh` — Check 24 flags >5 stale proposals
+- `audit-state.json` — bookmark tracking for tiered audits
+
+**Files:**
+- `soul-proposals.jsonl` — append-only proposal log with status tracking
+- `review-soul-proposals.py` — 8pm ET cron reviewer
+- `audit-state.json` — daily/weekly/monthly audit bookmarks
 
 ## Troubleshooting Rule
 

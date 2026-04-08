@@ -76,6 +76,76 @@ gog sheets get "$SHEET_ID" "Training Log!A:J" --account "$GOG_ACCT" | grep "YYYY
 
 ---
 
+## 5.5 Conversation Review & Soul/Memory Routing
+
+Three tiers — run the appropriate one based on the cycle. Update `audit-state.json` bookmarks after each tier.
+
+### A. Incremental (every audit)
+
+Read conversation logs from the `audit-state.json` daily bookmark to now. For every user message that looks like a directive, rule, correction, or behavioral instruction:
+
+| Timestamp | User said | Type | Bot action | Correct destination | Correct? | Notes |
+|-----------|-----------|------|------------|-------------------|----------|-------|
+| | | directive/fact/correction/algorithm | propose_soul_change / save_memory / neither | soul / memory | YES/NO | |
+
+**Check for:**
+- Directives routed to save_memory instead of propose_soul_change (mis-route)
+- Soul-type rules the bot acknowledged but didn't route anywhere (missed route)
+- Proposals that are actually just facts/preferences (should be memory)
+- Corrections the user gave that the bot just acknowledged without persisting anywhere
+
+After checking, update `audit-state.json` daily bookmark:
+```bash
+python3 -c "
+import json, datetime
+from zoneinfo import ZoneInfo
+now = datetime.datetime.now(ZoneInfo('America/Toronto')).isoformat()
+path = '/home/openclaw/lifeos/audit-state.json'
+try:
+    state = json.load(open(path))
+except: state = {}
+state['daily'] = {'last_run': now}
+json.dump(state, open(path, 'w'), indent=2)
+"
+```
+
+### B. Pattern scan (weekly — run on Sundays or when weekly bookmark is >7 days old)
+
+Read last 7 days of conversation logs. Look for recurring patterns:
+
+| Pattern | First seen | Count | Status | Action needed? |
+|---------|-----------|-------|--------|---------------|
+| Same instruction given 2+ times | | | User had to repeat = bot didn't learn | Should be a soul proposal |
+| Soul proposal filed then rejected | | | | Was the directive unclear? |
+| Memory entries that are actually rules | | | | Promote to soul proposal |
+| Bot follows a rule inconsistently | | | | Needs stronger soul.md wording |
+| Things tried and reverted | | | | Document why in decisions.log |
+
+Update `audit-state.json` weekly bookmark after completing.
+
+### C. Deep review (monthly — run on 1st or when monthly bookmark is >30 days old)
+
+Full sweep comparing soul.md against actual usage over the past month:
+
+1. Read all soul proposals from the month (approved, rejected, pending)
+2. Read soul.md — is each rule actually followed in practice?
+3. Scan logs for implicit rules the user expects but aren't in soul.md
+4. Check for soul.md rules that are never triggered (dead rules)
+5. Check memory.md for entries that should have been soul proposals
+6. Diff soul.md against 30-day-old version — any drift, dilution, or contradiction?
+
+| soul.md rule | Followed in practice? | Still needed? | Notes |
+|-------------|----------------------|--------------|-------|
+| (fill per section) | YES/NO/PARTIALLY | YES/NO | |
+
+**Pending proposals:** (count in soul-proposals.jsonl not yet reviewed)
+**Mis-routes found this period:** (count)
+**Missed routes found this period:** (count)
+
+Update `audit-state.json` monthly bookmark after completing.
+
+---
+
 ## 6. Backfill Actions
 
 List anything that needs to be fixed or backfilled based on this audit.

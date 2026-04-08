@@ -280,6 +280,17 @@ if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
     fi
 fi
 
+# --- Check 24: Stale soul proposals ---
+PROPOSALS_FILE="$REPO_DIR/soul-proposals.jsonl"
+if [ -f "$PROPOSALS_FILE" ]; then
+    PENDING=$(grep -c '"status"[^}]*"pending"' "$PROPOSALS_FILE" 2>/dev/null || true)
+    AWAITING=$(grep -c '"status"[^}]*"awaiting_user"' "$PROPOSALS_FILE" 2>/dev/null || true)
+    STALE_COUNT=$((PENDING + AWAITING))
+    if [ "$STALE_COUNT" -gt 5 ]; then
+        flag_issue "stale_soul_proposals" "$STALE_COUNT pending/awaiting soul proposals — review may not be running or user not responding"
+    fi
+fi
+
 # --- Send alert if unresolved issues found ---
 if [ -n "$ISSUES" ]; then
     MSG=$(printf "*QA Check — %s*\n\nIssues found:\n%b\n\nReview or ask J.A.R.V.I.S. to investigate." "$TODAY" "$ISSUES")

@@ -282,6 +282,43 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "propose_soul_change",
+            "description": (
+                "Propose a change to soul.md (behavioral rules, reasoning principles, "
+                "communication style, algorithms, domain knowledge). Does NOT make the "
+                "change — writes a proposal for review by Claude Code, then the user "
+                "approves or rejects via Telegram. Use when the user gives a directive, "
+                "algorithm, or behavioral rule that should become permanent. Do NOT use "
+                "for facts, preferences, decisions, or personal context — those go to "
+                "save_memory."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposed_text": {
+                        "type": "string",
+                        "description": "The exact text to add/change in soul.md",
+                    },
+                    "section": {
+                        "type": "string",
+                        "description": "Which soul.md section this belongs in (e.g. 'How You Think', 'Core Rules', 'How You Communicate')",
+                    },
+                    "reasoning": {
+                        "type": "string",
+                        "description": "Why this change is needed — what problem it solves or what user directive it implements",
+                    },
+                    "source_message": {
+                        "type": "string",
+                        "description": "The user's original message that triggered this proposal",
+                    },
+                },
+                "required": ["proposed_text", "section", "reasoning", "source_message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_memory",
             "description": "Read memory.md — the file containing everything the user asked to remember.",
             "parameters": {
@@ -601,6 +638,27 @@ def tool_save_memory(data: dict) -> str:
     return "Save failed [VERIFY FAILED]"
 
 
+def tool_propose_soul_change(data: dict) -> str:
+    proposals_path = BASE_DIR / "soul-proposals.jsonl"
+    from zoneinfo import ZoneInfo
+    now = datetime.datetime.now(ZoneInfo("America/Toronto"))
+    entry = {
+        "id": now.strftime("%Y%m%d%H%M%S"),
+        "timestamp": now.isoformat(),
+        "status": "pending",
+        "proposed_text": data["proposed_text"],
+        "section": data["section"],
+        "reasoning": data["reasoning"],
+        "source_message": data["source_message"],
+    }
+    with open(proposals_path, "a") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    content = proposals_path.read_text()
+    if entry["id"] in content:
+        return f"Soul proposal #{entry['id']} filed for review. It will be reviewed by Claude Code and sent to you for APPROVE/REJECT. [VERIFIED]"
+    return "Proposal save failed [VERIFY FAILED]"
+
+
 def tool_read_memory(data: dict) -> str:
     path = MEMORY_DIR / "memory.md"
     if not path.exists():
@@ -684,6 +742,7 @@ TOOL_DISPATCH = {
     "write_sheet": tool_write_sheet,
     "clear_row": tool_clear_row,
     "save_memory": tool_save_memory,
+    "propose_soul_change": tool_propose_soul_change,
     "read_memory": tool_read_memory,
     "upload_to_drive": tool_upload_to_drive,
     "list_drive": tool_list_drive,
@@ -709,7 +768,7 @@ def _append_failure_notice(reply: str, tools_used: list[dict]) -> str:
     return reply
 
 
-WRITE_TOOLS = {"write_sheet", "clear_row", "log_workout", "log_cardio", "log_weight", "log_nutrition", "save_memory"}
+WRITE_TOOLS = {"write_sheet", "clear_row", "log_workout", "log_cardio", "log_weight", "log_nutrition", "save_memory", "propose_soul_change"}
 
 
 def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> str:
@@ -918,6 +977,41 @@ async def _send_reply(update, user_text: str, reply: str, tools_used: list):
         await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
 
 
+# --- Soul proposal verdict handling ---
+
+def _handle_proposal_verdict(proposal_id: str, action: str) -> str:
+    """Apply or reject a soul proposal by ID."""
+    proposals_path = BASE_DIR / "soul-proposals.jsonl"
+    if not proposals_path.exists():
+        return "No proposals file found."
+    lines = proposals_path.read_text().strip().split("\n")
+    updated = []
+    target = None
+    for line in lines:
+        if not line:
+            continue
+        entry = json.loads(line)
+        if entry.get("id") == proposal_id:
+            entry["status"] = action
+            entry["decided_at"] = datetime.datetime.now().isoformat()
+            target = entry
+        updated.append(json.dumps(entry, ensure_ascii=False))
+    if not target:
+        return f"Proposal #{proposal_id} not found."
+    proposals_path.write_text("\n".join(updated) + "\n")
+
+    if action == "approved":
+        # Append to soul.md
+        with open(SOUL_PATH, "a") as f:
+            f.write(f"\n{target['proposed_text']}\n")
+        # Reload soul text for the running process
+        global _SOUL_TEXT
+        _SOUL_TEXT = SOUL_PATH.read_text()
+        return f"{AGENT_EMOJI}\nSoul proposal #{proposal_id} APPROVED and applied to soul.md. I'll follow this rule going forward."
+    else:
+        return f"{AGENT_EMOJI}\nSoul proposal #{proposal_id} REJECTED. No changes made."
+
+
 # --- Telegram handlers ---
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -932,6 +1026,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     log.info("Message from the user: %s", user_text[:100])
+
+    # Handle APPROVE/REJECT for soul proposals
+    verdict_match = re.match(r'^(APPROVE|REJECT)\s+(\d+)', user_text, re.IGNORECASE)
+    if verdict_match:
+        action = "approved" if verdict_match.group(1).upper() == "APPROVE" else "rejected"
+        proposal_id = verdict_match.group(2)
+        result = _handle_proposal_verdict(proposal_id, action)
+        log_conversation(user_text, result)
+        result_escaped = _escape_markdownv2(result)
+        await update.message.reply_text(result_escaped, parse_mode="MarkdownV2")
+        return
 
     cid = update.effective_chat.id
     conv = conversations.get(cid)
