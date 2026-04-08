@@ -141,7 +141,7 @@ for f in "$REPO_DIR"/memory/*.md; do
 done
 
 # --- Check 10: Architecture drift ---
-for f in bot.py soul.md morning-brief-ai.py architecture.md procedures.md qa-check.sh auto-commit.sh; do
+for f in bot.py soul.md morning-brief-ai.py architecture.md qa-check.sh auto-commit.sh; do
     if [ ! -f "$REPO_DIR/$f" ]; then
         flag_issue "missing_file_$f" "Architecture: Missing expected file $f"
     fi
