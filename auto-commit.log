@@ -186,3 +186,8 @@ Committed and pushed.
 [master 7e917f0] auto: snapshot 2026-04-08
  2 files changed, 4 insertions(+)
 Committed and pushed.
+[master 031d4af] auto: snapshot 2026-04-08
+ 12 files changed, 481 insertions(+), 11 deletions(-)
+ create mode 100644 audit-state.json
+ create mode 100755 review-soul-proposals.py
+Committed and pushed.

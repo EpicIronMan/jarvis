@@ -82,7 +82,21 @@ Three tiers — run the appropriate one based on the cycle. Update `audit-state.
 
 ### A. Incremental (every audit)
 
-Read conversation logs from the `audit-state.json` daily bookmark to now. For every user message that looks like a directive, rule, correction, or behavioral instruction:
+Read conversation logs from the `audit-state.json` daily bookmark to now.
+
+**A1. Intent vs Action** — For every user request, did the bot do what the user actually meant?
+
+| Timestamp | User said | What user meant | What bot did | Correct? | Notes |
+|-----------|-----------|----------------|-------------|----------|-------|
+| | | | | YES/NO | |
+
+**Check for:**
+- Bot misinterpreted units, exercises, dates, or context
+- Bot did the right tool call but with wrong values
+- Bot answered a different question than what was asked
+- Bot acknowledged a request but never acted on it
+
+**A2. Routing** — For every directive, rule, correction, or algorithm:
 
 | Timestamp | User said | Type | Bot action | Correct destination | Correct? | Notes |
 |-----------|-----------|------|------------|-------------------|----------|-------|
@@ -133,6 +147,8 @@ Full sweep comparing soul.md against actual usage over the past month:
 4. Check for soul.md rules that are never triggered (dead rules)
 5. Check memory.md for entries that should have been soul proposals
 6. Diff soul.md against 30-day-old version — any drift, dilution, or contradiction?
+7. Cross-reference decisions.log — are we re-litigating decisions already made? Are there old decisions whose context has changed (new architecture, different model) that might be worth revisiting?
+8. Look for approaches tried and abandoned in past months — did conditions change enough to retry?
 
 | soul.md rule | Followed in practice? | Still needed? | Notes |
 |-------------|----------------------|--------------|-------|
@@ -201,6 +217,23 @@ Only add guardrails when a pattern repeats. Document what was added and why.
 
 ---
 
+## 10. Audit the Audit
+
+After every fix or issue found in this session, ask: **would this audit template have caught it?** If not, add a check right now.
+
+| Issue found this session | Which audit section should catch it? | Does that section exist? | Added? |
+|-------------------------|-------------------------------------|------------------------|--------|
+| (fill per session) | | YES/NO | YES/NO — describe what was added |
+
+**Also check:**
+- Did any section feel redundant or never produce findings? Flag for removal in monthly review.
+- Did the auditor (Claude Code) skip a section or do it superficially? Note which and why.
+- Were there findings from casual conversation that the structured sections missed? That's a gap — add a check.
+
+**Principle:** The audit template is a living document. Every session should leave it slightly better than it was found.
+
+---
+
 ## Summary
 
 - **Session quality:** (1-5 score)
@@ -208,4 +241,5 @@ Only add guardrails when a pattern repeats. Document what was added and why.
 - **Backfills needed:** (count)
 - **Guardrails added:** (count)
 - **Over-restrictions found:** (count — rules that should be replaced by model reasoning + tools)
+- **Audit template changes:** (count — checks added/modified this session)
 - **Model trend:** (improving / stable / declining)

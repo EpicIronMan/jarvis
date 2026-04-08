@@ -8,3 +8,8 @@
 {"date":"2026-04-08","key":"git_remote_unreachable","msg":"Cannot reach git remote — backup is not updating"}
 {"date":"2026-04-08","key":"memory_perms","msg":"memory.md owned by root (should be openclaw) — bot cannot write"}
 {"date":"2026-04-08","key":"said_not_did_2026-04-08","msg":"Bot claimed 1 log/save actions but made 0 tool calls"}
+{"date":"2026-04-08","key":"bf_wrong_source","msg":"Procedure: Bot discussed BF% but never read Body Scans tab"}
+{"date":"2026-04-08","key":"hallucinated_saves_2026-04-07","msg":"Procedure: Bot promised more saves than executed (4 claimed, 3 done)"}
+{"date":"2026-04-08","key":"git_broken","msg":"Architecture: Git repo broken or missing"}
+{"date":"2026-04-08","key":"git_remote_unreachable","msg":"Cannot reach git remote — backup is not updating"}
+{"date":"2026-04-08","key":"said_not_did_2026-04-08","msg":"Bot claimed 1 log/save actions but made 0 tool calls"}

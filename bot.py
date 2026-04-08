@@ -63,18 +63,21 @@ logging.basicConfig(
 log = logging.getLogger("lifeos")
 
 # --- Load system prompt ---
-_SOUL_TEXT = SOUL_PATH.read_text() if SOUL_PATH.exists() else ""
 
 
 def _build_system_prompt() -> str:
-    """Build system prompt with current date/time and sheet link injected."""
+    """Build system prompt with current date/time and sheet link injected.
+
+    Reads soul.md from disk every call so edits take effect without restart.
+    """
     from zoneinfo import ZoneInfo
+    soul_text = SOUL_PATH.read_text() if SOUL_PATH.exists() else ""
     now = datetime.datetime.now(ZoneInfo("America/Toronto"))
     context = (
         f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
         f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
     )
-    return _SOUL_TEXT + context
+    return soul_text + context
 
 # --- gog environment ---
 GOG_ENV = {
@@ -286,11 +289,10 @@ TOOLS = [
             "description": (
                 "Propose a change to soul.md (behavioral rules, reasoning principles, "
                 "communication style, algorithms, domain knowledge). Does NOT make the "
-                "change — writes a proposal for review by Claude Code, then the user "
-                "approves or rejects via Telegram. Use when the user gives a directive, "
-                "algorithm, or behavioral rule that should become permanent. Do NOT use "
-                "for facts, preferences, decisions, or personal context — those go to "
-                "save_memory."
+                "change — writes a proposal for Claude Code to review during the daily "
+                "audit. Use when the user gives a directive, algorithm, or behavioral "
+                "rule that should become permanent. Do NOT use for facts, preferences, "
+                "decisions, or personal context — those go to save_memory."
             ),
             "parameters": {
                 "type": "object",
@@ -977,41 +979,6 @@ async def _send_reply(update, user_text: str, reply: str, tools_used: list):
         await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
 
 
-# --- Soul proposal verdict handling ---
-
-def _handle_proposal_verdict(proposal_id: str, action: str) -> str:
-    """Apply or reject a soul proposal by ID."""
-    proposals_path = BASE_DIR / "soul-proposals.jsonl"
-    if not proposals_path.exists():
-        return "No proposals file found."
-    lines = proposals_path.read_text().strip().split("\n")
-    updated = []
-    target = None
-    for line in lines:
-        if not line:
-            continue
-        entry = json.loads(line)
-        if entry.get("id") == proposal_id:
-            entry["status"] = action
-            entry["decided_at"] = datetime.datetime.now().isoformat()
-            target = entry
-        updated.append(json.dumps(entry, ensure_ascii=False))
-    if not target:
-        return f"Proposal #{proposal_id} not found."
-    proposals_path.write_text("\n".join(updated) + "\n")
-
-    if action == "approved":
-        # Append to soul.md
-        with open(SOUL_PATH, "a") as f:
-            f.write(f"\n{target['proposed_text']}\n")
-        # Reload soul text for the running process
-        global _SOUL_TEXT
-        _SOUL_TEXT = SOUL_PATH.read_text()
-        return f"{AGENT_EMOJI}\nSoul proposal #{proposal_id} APPROVED and applied to soul.md. I'll follow this rule going forward."
-    else:
-        return f"{AGENT_EMOJI}\nSoul proposal #{proposal_id} REJECTED. No changes made."
-
-
 # --- Telegram handlers ---
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1026,17 +993,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     log.info("Message from the user: %s", user_text[:100])
-
-    # Handle APPROVE/REJECT for soul proposals
-    verdict_match = re.match(r'^(APPROVE|REJECT)\s+(\d+)', user_text, re.IGNORECASE)
-    if verdict_match:
-        action = "approved" if verdict_match.group(1).upper() == "APPROVE" else "rejected"
-        proposal_id = verdict_match.group(2)
-        result = _handle_proposal_verdict(proposal_id, action)
-        log_conversation(user_text, result)
-        result_escaped = _escape_markdownv2(result)
-        await update.message.reply_text(result_escaped, parse_mode="MarkdownV2")
-        return
 
     cid = update.effective_chat.id
     conv = conversations.get(cid)

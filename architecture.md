@@ -298,7 +298,6 @@ Any provider with an OpenAI-compatible chat completions API works with zero code
 | `0 7 * * *` ET | `morning-brief.sh` | Daily Telegram morning brief |
 | `0 * * * *` | `auto-commit.sh` | Hourly git snapshot |
 | `30 8 * * *` ET | `qa-check.sh` | Daily integrity check (alerts only on failure) |
-| `0 20 * * *` ET | `review-soul-proposals.py` | Review pending soul proposals, send to user for APPROVE/REJECT |
 | `0 9 1 * *` ET | `monthly-audit.sh` | Monthly architecture audit report |
 
 ## Service Management
@@ -423,9 +422,9 @@ Previously a separate file (`procedures.md`). Consolidated into soul.md because 
 ```
 User gives directive → Bot calls propose_soul_change → soul-proposals.jsonl (status: pending)
                                                               |
-8pm ET cron → review-soul-proposals.py → AI reviews → Telegram message (status: awaiting_user)
+Evening audit → Claude Code reviews all pending proposals → presents to user
                                                               |
-User replies APPROVE/REJECT <id> → bot.py handles → soul.md updated (or not)
+User says APPROVE/REJECT → Claude Code edits soul.md (placed in correct section)
 ```
 
 **Routing logic (in soul.md):** The bot distinguishes between soul material (behavioral rules, algorithms, communication style) and memory material (facts, preferences, decisions). When unsure, defaults to memory — easier to promote later.
@@ -436,16 +435,16 @@ User replies APPROVE/REJECT <id> → bot.py handles → soul.md updated (or not)
 - Monthly: deep review comparing soul.md against actual usage, dead rules, drift
 
 **Connects to:**
-- `bot.py` — propose_soul_change tool + APPROVE/REJECT handler
-- `soul.md` — approved proposals appended here + routing logic in "Where Things Go"
+- `bot.py` — propose_soul_change tool writes proposals
+- `soul.md` — Claude Code applies approved proposals here + routing logic in "Where Things Go"
 - `morning-brief-ai.py` — pending count shown in morning brief
-- `daily-audit-template.md` — Section 5.5 verifies routing correctness
+- `daily-audit-template.md` — Section 5.5 reviews proposals and verifies routing correctness
 - `qa-check.sh` — Check 24 flags >5 stale proposals
 - `audit-state.json` — bookmark tracking for tiered audits
 
 **Files:**
 - `soul-proposals.jsonl` — append-only proposal log with status tracking
-- `review-soul-proposals.py` — 8pm ET cron reviewer
+- `review-soul-proposals.py` — standalone reviewer (can be run manually, not cron'd)
 - `audit-state.json` — daily/weekly/monthly audit bookmarks
 
 ## Troubleshooting Rule
@@ -555,3 +554,6 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-07:** Removed workout approval step. **Why:** Extra round-trip that got missed or caused friction. Bot now logs immediately and shows what was logged — user corrects if needed. Updated soul.md, bot.py tool description, and procedures.md (before deletion).
 - **2026-04-07:** Switched AI model from Grok 4.20 ($2/$6) to grok-4-1-fast-reasoning ($0.20/$0.50). **Why:** The issues today were model laziness (not verifying output, inconsistent math), not capability. With soul.md reasoning principles, tool history in conversation reload, and code-level API failure handling, the safety net is strong enough for the cheaper model. 10x cost reduction. Reversible via env var.
 - **2026-04-05:** Orphan cleanup. Removed: old `/home/openclaw/lifeos-bot/` directory (stale duplicate), Docker sandbox container + images (99MB, OpenClaw only), OpenClaw directories (agents, canvas, cron, devices, identity, logs, media, sandbox, tasks, telegram, credentials), stale workspace files (old SOUL.md, CHANGELOG.md, etc.). Kept: `.openclaw/workspace/homebrew/` (gog binary), `.openclaw/workspace/.config/gogcli/` (Google auth). **Why:** ~100MB of dead weight serving no purpose. **QA approach:** Snapshot all service states before cleanup → clean → verify same services still respond → send Telegram confirmation.
+- **2026-04-08:** Added soul proposal pipeline. Bot calls `propose_soul_change` tool to file proposals to `soul-proposals.jsonl`. Claude Code reviews pending proposals during daily audit (Section 5.5) and applies approved changes to soul.md. Bot never writes to soul.md directly. **Why:** "Tell the user to have Claude Code update soul.md" pattern lost directives — user forgets between sessions. Pipeline captures immediately, Claude Code reviews for conflicts/quality, user approves. soul.md routing logic added to "Where Things Go" section — bot distinguishes between behavioral rules (soul proposals) and facts/preferences (memory). **Connections:** bot.py (propose_soul_change tool), soul.md (routing logic + approved proposals), soul-proposals.jsonl (proposal queue), daily-audit-template.md (Section 5.5 reviews proposals + routing), morning-brief-ai.py (pending count), qa-check.sh (Check 24 flags stale proposals).
+- **2026-04-08:** Expanded daily audit template. Added Section 5.5A1 (intent vs action — did bot understand what user actually meant), expanded 5.5C (cross-reference decisions.log for re-litigated or revisitable decisions), added Section 10 (audit the audit — after every fix, check if the audit would have caught it, if not add a check). **Why:** Routing check (5.5A2) only verified directives went to the right place, not that the bot understood the user's intent. Monthly review didn't compare against decisions.log. No mechanism existed to improve the audit template itself based on findings.
+- **2026-04-08:** Fixed memory.md ownership (root → openclaw). **Why:** Claude Code sessions run as root; files created/edited get root ownership. Bot runs as openclaw and can't write. Same issue as 2026-04-06 — root cause is Claude Code editing files in the repo. Fixed ownership on all new files created this session.

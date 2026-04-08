@@ -1,0 +1,2 @@
+{"key":"git_broken","fix":"Git repo is healthy — false positive from qa-check running while auto-commit held index.lock","date":"2026-04-08"}
+{"key":"memory_permissions","fix":"Fixed: chown openclaw:openclaw memory/memory.md — was root from Claude Code session editing it directly","date":"2026-04-08"}
