@@ -132,7 +132,7 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- soul.md                         # AI system prompt (personality, rules, sheet schemas)
 |-- morning-brief.sh                # Daily 7am ET cron script (standalone, not part of bot)
 |-- architecture.md                 # This file (system map for any AI/human)
-|-- procedures.md                   # Expected tool call patterns per operation
+|-- (procedures.md removed 2026-04-07 — consolidated into soul.md)
 |-- qa-check.sh                     # Daily integrity + procedure compliance check
 |-- resolve.sh                      # CLI tool to mark QA issues as resolved
 |-- resolved.jsonl                  # Log of resolved QA issues (checked before alerting)
@@ -375,7 +375,7 @@ Every conversation log entry includes a `tools` array showing exactly which tool
 
 All hits are logged to `qa-hits.jsonl` for the monthly effectiveness audit.
 
-**Why procedure checks:** The bot should follow specific tool call patterns (defined in `procedures.md`). Example: when discussing body fat, it MUST read the Body Scans tab (DEXA data), NOT the Body Metrics tab (Renpho data). The QA catches when it takes shortcuts.
+**Why procedure checks:** The bot should follow specific tool call patterns (defined in `soul.md` under "Data Sources"). Example: when discussing body fat, it MUST read the Body Scans tab (DEXA data), NOT the Body Metrics tab (Renpho data). The QA catches when it takes shortcuts.
 
 ### Layer 4: Resolution tracking (zero tokens)
 
@@ -402,11 +402,9 @@ If the bot consistently does something outside the defined procedures:
 
 **Why not auto-fix:** Deviations are signals, not bugs. Sometimes the bot found a better path and the procedure should be updated. Only the user decides.
 
-### Procedures (`procedures.md`)
+### Procedures (consolidated into `soul.md` on 2026-04-07)
 
-Defines the expected tool call patterns for each operation — which sheet tab for which data, what tools should be called for a status report, etc. This is the "correct path" that QA checks against.
-
-**Why it's a separate file:** Keeps architecture.md focused on the system map. procedures.md is the operational rulebook that changes more frequently as we learn what works.
+Previously a separate file (`procedures.md`). Consolidated into soul.md because having operational rules in multiple files caused drift — the bot would follow one file's rules while violating another's. Now soul.md is the single source of truth for all bot behavior, data source rules, and operational patterns.
 
 ## Troubleshooting Rule
 
@@ -418,9 +416,8 @@ When debugging the bot's behavior from an external AI (e.g. Claude Code terminal
 ## How Another AI Should Pick Up This System
 
 1. Read this file (`architecture.md`) for the full system map
-2. Read `procedures.md` for expected tool call patterns and data source rules
-3. Read `soul.md` for the AI personality, rules, and data schemas
-4. Read `bot.py` for the implementation (~400 lines, self-contained)
+2. Read `soul.md` for the AI personality, rules, data sources, and operational patterns
+3. Read `bot.py` for the implementation (self-contained)
 4. Read files in `memory/` for persistent state
 5. Read recent files in `logs/` for conversation history
 6. Run `git log --oneline` to see change history
@@ -481,7 +478,7 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-05:** Added read-after-write verification on all tool writes. **Why:** OpenClaw proved writes can silently fail. Verification catches this immediately.
 - **2026-04-05:** Added tool audit trail to conversation logs. **Why:** The bot said it would update CHANGELOG.md but only called save_memory once. The tool log catches claims vs actual actions.
 - **2026-04-05:** Added daily QA check (qa-check.sh). **Why:** Catches data gaps, procedure violations, service outages, and architecture drift — all at zero token cost.
-- **2026-04-05:** Added procedures.md. **Why:** Defines the "correct path" for each operation so QA can check compliance. If the bot deviates, we discuss whether the procedure or the bot is wrong.
+- **2026-04-05:** Added procedures.md. **Why:** Defines the "correct path" for each operation so QA can check compliance. (Consolidated into soul.md on 2026-04-07 — separate file caused instruction drift.)
 - **2026-04-05:** Added resolution tracking (resolved.jsonl + resolve.sh). **Why:** QA was flagging the same fixed issues repeatedly. Resolution log lets QA skip known fixes and avoid alert fatigue.
 - **2026-04-05:** Added sync_fitbit tool for on-demand data pulls. **Why:** Fitbit syncs 3x/day but user wanted fresh data on demand. Fixed auth issue (bot couldn't call systemctl, now runs script directly).
 - **2026-04-05:** Added sync timestamps to Fitbit data (Notes column). **Why:** Without timestamps, no way to know if data is from today's weigh-in or yesterday's stale sync.
@@ -507,4 +504,12 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-06:** Added `research` tool — calls Grok 4.20 (grok-4.20-0309-reasoning) for deep reasoning tasks. Used for calorie/MET calculations, exercise science, nutrition research. Admin model (nano) handles tool calling; research model handles factual accuracy. Results should be cached in memory/Notes. **Why:** Admin model shouldn't guess at research — wrong MET value (7 instead of ~4) produced 320cal instead of ~150-200cal.
 - **2026-04-06:** Added Cardio tab to Google Sheet + `log_cardio` tool to bot.py. Columns: Date, Exercise, Duration (min), Speed, Incline, Net Calories, MET Used, Data Source, Notes. Separate from Training Log to keep schemas clean. **Why:** Bot was hacking cardio into `log_workout` (reps=minutes, weight=speed), producing garbage data. Cardio needs duration/speed/incline/calories, not sets/reps/weight. Updated `read_sheet` available tabs to include Cardio.
 - **2026-04-06:** Saved workout logging decisions to memory.md: varying reps → multi-row, unilateral → per-side labels, cardio algorithm (net calories, MET formula, step overcount, caching rules). **Why:** These were agreed in conversation but never persisted due to the permission bug. Without them, the bot would forget these decisions every new day.
+- **2026-04-07:** Consolidated procedures.md into soul.md. **Why:** Operational rules were scattered across soul.md, procedures.md, memory.md, and bot.py tool descriptions — they drifted apart and contradicted each other (e.g. soul.md said "log immediately" while tool description said "wait for confirmation"). Now soul.md is the single source of truth for all bot behavior. memory.md is only for user decisions (routine changes, approvals). procedures.md deleted.
+- **2026-04-07:** Added "How You Think" section to soul.md — data integrity principles, self-verification standard. **Why:** Bot was making basic reasoning mistakes (date hallucination, inconsistent calculations, not verifying writes) because soul.md had specific rules but no general reasoning principles. The model followed rules mechanically instead of thinking critically.
+- **2026-04-07:** Added "Where Things Go" section to soul.md. **Why:** Bot was saving operational rules to memory.md instead of soul.md, causing fragmentation. Now the bot knows: soul.md = behavioral rules, memory.md = user decisions, decisions.log = tradeoffs.
+- **2026-04-07:** Fixed conversation reload to include tool history. **Why:** `load_conversation_from_logs()` only loaded user/assistant text, stripping tool calls and results. After a restart, the model had no idea what it actually did vs what it said — couldn't self-verify across restarts.
+- **2026-04-07:** Fixed sheet append column drift. Changed from INSERT_ROWS to OVERWRITE mode for all gog sheets append calls. **Why:** INSERT_ROWS combined with blank rows in the sheet caused data to land 5+ columns to the right. Every April 7 workout was misaligned. Also fixed `_verify_sheet_write` to check column position (date in col A, field in col B) instead of just string presence anywhere in the row — the old check returned [VERIFIED] for misaligned data.
+- **2026-04-07:** Added empty response retry and 429 rate limit backoff to ask_ai(). **Why:** Grok returned empty content (user saw blank messages) and 429 errors (raw error string dumped to user). These are API-level failures the model can't self-correct — code handling required. Retries once on empty, backs off 30/60/120s on 429.
+- **2026-04-07:** Removed workout approval step. **Why:** Extra round-trip that got missed or caused friction. Bot now logs immediately and shows what was logged — user corrects if needed. Updated soul.md, bot.py tool description, and procedures.md (before deletion).
+- **2026-04-07:** Switched AI model from Grok 4.20 ($2/$6) to grok-4-1-fast-reasoning ($0.20/$0.50). **Why:** The issues today were model laziness (not verifying output, inconsistent math), not capability. With soul.md reasoning principles, tool history in conversation reload, and code-level API failure handling, the safety net is strong enough for the cheaper model. 10x cost reduction. Reversible via env var.
 - **2026-04-05:** Orphan cleanup. Removed: old `/home/openclaw/lifeos-bot/` directory (stale duplicate), Docker sandbox container + images (99MB, OpenClaw only), OpenClaw directories (agents, canvas, cron, devices, identity, logs, media, sandbox, tasks, telegram, credentials), stale workspace files (old SOUL.md, CHANGELOG.md, etc.). Kept: `.openclaw/workspace/homebrew/` (gog binary), `.openclaw/workspace/.config/gogcli/` (Google auth). **Why:** ~100MB of dead weight serving no purpose. **QA approach:** Snapshot all service states before cleanup → clean → verify same services still respond → send Telegram confirmation.

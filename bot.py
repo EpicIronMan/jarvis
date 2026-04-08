@@ -457,7 +457,7 @@ def _pdf_to_base64_images(
 
 def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
     """Read back the sheet and verify the write landed in the correct columns."""
-    check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:B"])
+    check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:B", "-p"])
     if check.startswith("ERROR"):
         return " [VERIFY FAILED: could not read sheet back]"
     for line in check.strip().split("\n"):
@@ -706,7 +706,7 @@ TOOLS_WITH_CONVERSATION = {"read_pdf"}
 
 def _append_failure_notice(reply: str, tools_used: list[dict]) -> str:
     """If any tool failed and the bot didn't mention it, append a notice."""
-    failed = [t for t in tools_used if "TOOL FAILED" in t.get("result", "") or "ERROR" in t.get("result", "")]
+    failed = [t for t in tools_used if "TOOL FAILED" in t.get("result", "") or "ERROR" in t.get("result", "") or "VERIFY FAILED" in t.get("result", "")]
     if not failed:
         return reply
     failure_keywords = ("fail", "error", "could not", "unable", "didn't work", "permission denied")
