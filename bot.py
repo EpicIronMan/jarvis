@@ -776,12 +776,10 @@ WRITE_TOOLS = {"write_sheet", "clear_row", "log_workout", "log_cardio", "log_wei
 def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> str:
     """If the bot claims it wrote/updated data but made no write tool calls, append warning."""
     action_phrases = (
-        r"i(?:'ve| have) (?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
+        r"i(?:'ve| have) (?:just |now )?(?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
         r"(?:updated|fixed|corrected|logged|cleared|deleted|removed|saved|added|appended) (?:the|your|it|row|entry|data)",
-        r"(?:executing|done|complete).*(?:delet|clear|remov|updat|fix|log|writ|sav)",
         r"let me (?:correct|fix|update|delete|remove|clear|log|save|add)",
-        r"i (?:will|can|shall) (?:now )?(?:correct|fix|update|delete|remove|clear|log|save|add)",
-        r"the (?:sheet|tab|row|entry|data) (?:has been|is now|was) (?:updated|fixed|corrected|cleared|deleted|removed|saved)",
+        r"i (?:will|shall) (?:now )?(?:correct|fix|update|delete|remove|clear|log|save|add)",
     )
     reply_lower = reply.lower()
     claimed = any(re.search(p, reply_lower) for p in action_phrases)
