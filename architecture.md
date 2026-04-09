@@ -1,6 +1,6 @@
 # J.A.R.V.I.S. — Architecture Document
 
-Last updated: 2026-04-08
+Last updated: 2026-04-09
 
 ## Maintenance Rule
 
@@ -330,7 +330,7 @@ Every message exchange is saved to `logs/YYYY-MM-DD.jsonl`. Each line:
 
 ### Layer 1: Read-after-write verification (every write, zero tokens)
 
-Every tool that writes data (log_workout, log_weight, log_nutrition, save_memory) reads the data back immediately and appends `[VERIFIED]` or `[VERIFY FAILED]` to the tool result. The AI sees the verification status and should tell the user if it failed.
+Every tool that writes data (log_workout, log_cardio, log_weight, log_nutrition, save_memory) reads the data back immediately. On success: returns `[VERIFIED]` in the result. On failure: returns `WRITE FAILED` with no success language — the model cannot claim the write succeeded because the tool result never says "Logged".
 
 **Why:** The OpenClaw sandbox bug showed that writes can silently fail. Read-after-write catches this at the moment it happens, not hours later.
 
@@ -564,3 +564,4 @@ Each entry explains what changed AND why — so future audits can assess whether
 - **2026-04-08 (audit):** Refined write hallucination regex in bot.py. Removed overly broad past-tense pattern that matched descriptions of already-verified writes ("PR logged", "already updated"). Required "just"/"now" qualifier on "I've/I have" patterns. **Why:** 2 false positives today confused the user — warnings fired when bot described past actions, not new claims. **Connections:** bot.py `_append_write_hallucination_notice()`.
 - **2026-04-08 (audit):** Trimmed soul.md from 116 lines to ~50. Removed: "How You Communicate" (formatting rules), "How You Think" (meta-reasoning), "Where Things Go" (routing decision tree), auto-sync Fitbit rule, training volume reporting, prior performance with routines, decisions.log check, sanity-check instruction. Kept: identity, user stats, approval rule, DEXA ground truth, data sources, workout/cardio parsing, notes columns, goals, routine. Added one-line routing: "When user gives standing instruction, use propose_soul_change." **Why:** User observed model performed well in Grok app (minimal prompt) but poorly in bot (heavy constraints). Constraints were consuming model's cognitive budget — caused hallucinations, abbreviation confusion, multi-turn intent failures. All monitoring stays in bot.py code (untouched). **Connections:** soul.md, bot.py (monitoring unchanged).
 - **2026-04-08 (audit):** Cleared 15 phantom workout rows from Training Log. Bot triple-logged the 04-08 leg session (pyramid 340/360 + RPE finals + uniform 320). Kept only the final correct log (4 rows: LP 320x8x3, LC 100x10x3, LE 140x10x3, CC 8x10x3). **Why:** User sent workout data in stages, each got logged additively. Bot asked "clear if dupe?" but user was confused by the question. ~35k phantom volume removed.
+- **2026-04-09 (audit):** Replaced `gog sheets append --insert OVERWRITE` with targeted `gog sheets update` for all logging tools (log_workout, log_cardio, log_weight, log_nutrition). New helper `_find_next_row(tab)` reads column A to find last occupied row, then `_write_rows_to_sheet()` writes to exact row N+1 via `sheets update`. Also changed verify failure to return hard "WRITE FAILED" with no "Logged" language. **Why:** OVERWRITE append mode (added 2026-04-07 to replace INSERT_ROWS) still caused column drift when blank rows existed in the sheet. All 6 of today's workout logs landed shifted right — and the bot told the user they were "logged correctly" because the return string started with "Logged" before the verify tag. Two fixes: (1) targeted update bypasses Sheets API append quirks entirely — blank rows are irrelevant. (2) Hard failure message prevents model from misreporting success. Also backfilled 10 misaligned rows (Apr 8 + Apr 9 data). **Connections:** bot.py (`_find_next_row`, `_write_rows_to_sheet`, `_verify_sheet_write`, all 4 log tools), Google Sheets (Training Log).

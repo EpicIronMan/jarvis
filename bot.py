@@ -487,16 +487,43 @@ def _pdf_to_base64_images(
     return b64_images, total_pages
 
 
+def _find_next_row(tab: str) -> int | None:
+    """Find the next empty row in column A of a tab. Returns row number (1-based) or None on error."""
+    output = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:A"])
+    if output.startswith("ERROR"):
+        return None
+    lines = output.split("\n")
+    # Find last non-empty line — that's the last occupied row
+    last_occupied = 0
+    for i, line in enumerate(lines, start=1):
+        if line.strip():
+            last_occupied = i
+    return last_occupied + 1
+
+
+def _write_rows_to_sheet(tab: str, cols: str, rows: list[list[str]]) -> str:
+    """Write rows to a specific tab using targeted update (not append). Returns result string."""
+    next_row = _find_next_row(tab)
+    if next_row is None:
+        return "ERROR: could not determine next row in sheet"
+    end_row = next_row + len(rows) - 1
+    range_str = f"{tab}!A{next_row}:{cols}{end_row}"
+    return _run_gog([
+        "sheets", "update", SHEET_ID, range_str,
+        "--values-json", json.dumps(rows), "--input", "RAW",
+    ])
+
+
 def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
     """Read back the sheet and verify the write landed in the correct columns."""
     check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:B", "-p"])
     if check.startswith("ERROR"):
-        return " [VERIFY FAILED: could not read sheet back]"
+        return "VERIFY FAILED: could not read sheet back"
     for line in check.strip().split("\n"):
         cols = line.split("\t")
         if len(cols) >= 2 and expected_date in cols[0] and expected_field in cols[1]:
-            return " [VERIFIED]"
-    return f" [VERIFY FAILED: could not find {expected_date} with {expected_field} in columns A-B]"
+            return "VERIFIED"
+    return f"VERIFY FAILED: could not find {expected_date} with {expected_field} in columns A-B"
 
 
 def tool_log_workout(data: dict) -> str:
@@ -513,14 +540,13 @@ def tool_log_workout(data: dict) -> str:
             str(ex["weight_lbs"]), str(ex.get("rpe", "")),
             str(volume), session_type, "TELEGRAM",
         ])
-    result = _run_gog([
-        "sheets", "append", SHEET_ID, "Training Log!A:I",
-        "--values-json", json.dumps(rows), "--insert", "OVERWRITE", "--input", "RAW",
-    ])
+    result = _write_rows_to_sheet("Training Log", "I", rows)
     if result.startswith("ERROR"):
         return result
     verify = _verify_sheet_write("Training Log", date, exercises[-1]["name"])
-    return f"Logged {len(exercises)} exercises, total volume: {total_volume:,} lbs.{verify}"
+    if verify != "VERIFIED":
+        return f"WRITE FAILED for {len(exercises)} exercises — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
+    return f"Logged {len(exercises)} exercises, total volume: {total_volume:,} lbs. [{verify}]"
 
 
 def tool_log_cardio(data: dict) -> str:
@@ -531,14 +557,13 @@ def tool_log_cardio(data: dict) -> str:
         str(data["net_calories"]), str(data["met_used"]),
         "TELEGRAM", data.get("notes", ""),
     ]]
-    result = _run_gog([
-        "sheets", "append", SHEET_ID, "Cardio!A:I",
-        "--values-json", json.dumps(row), "--insert", "OVERWRITE", "--input", "RAW",
-    ])
+    result = _write_rows_to_sheet("Cardio", "I", row)
     if result.startswith("ERROR"):
         return result
     verify = _verify_sheet_write("Cardio", date, data["exercise"])
-    return f"Logged cardio: {data['exercise']} {data['duration_min']}min, {data['net_calories']} net cal (MET {data['met_used']}).{verify}"
+    if verify != "VERIFIED":
+        return f"WRITE FAILED for cardio — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
+    return f"Logged cardio: {data['exercise']} {data['duration_min']}min, {data['net_calories']} net cal (MET {data['met_used']}). [{verify}]"
 
 
 def tool_log_weight(data: dict) -> str:
@@ -549,14 +574,13 @@ def tool_log_weight(data: dict) -> str:
     source = data.get("data_source", "RENPHO")
     notes = data.get("notes", "")
     row = [[date, str(lbs), str(kg), bf, "", "", "", source, notes]]
-    result = _run_gog([
-        "sheets", "append", SHEET_ID, "Body Metrics!A:I",
-        "--values-json", json.dumps(row), "--insert", "OVERWRITE", "--input", "RAW",
-    ])
+    result = _write_rows_to_sheet("Body Metrics", "I", row)
     if result.startswith("ERROR"):
         return result
     verify = _verify_sheet_write("Body Metrics", date, str(lbs))
-    return f"Logged weight: {lbs} lbs ({kg} kg) on {date}.{verify}"
+    if verify != "VERIFIED":
+        return f"WRITE FAILED for weight — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
+    return f"Logged weight: {lbs} lbs ({kg} kg) on {date}. [{verify}]"
 
 
 def tool_log_nutrition(data: dict) -> str:
@@ -567,14 +591,13 @@ def tool_log_nutrition(data: dict) -> str:
         str(data.get("fiber_g", "")), str(data.get("sodium_mg", "")),
         data.get("data_source", "MFP"), data.get("notes", ""),
     ]]
-    result = _run_gog([
-        "sheets", "append", SHEET_ID, "Nutrition!A:I",
-        "--values-json", json.dumps(row), "--insert", "OVERWRITE", "--input", "RAW",
-    ])
+    result = _write_rows_to_sheet("Nutrition", "I", row)
     if result.startswith("ERROR"):
         return result
     verify = _verify_sheet_write("Nutrition", date, str(data["calories"]))
-    return f"Logged nutrition for {date}: {data['calories']} cal, {data['protein_g']}g protein.{verify}"
+    if verify != "VERIFIED":
+        return f"WRITE FAILED for nutrition — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
+    return f"Logged nutrition for {date}: {data['calories']} cal, {data['protein_g']}g protein. [{verify}]"
 
 
 def tool_read_sheet(data: dict) -> str:
