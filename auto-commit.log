@@ -234,3 +234,7 @@ Committed and pushed.
 [master ad5be2d] auto: snapshot 2026-04-08
  1 file changed, 3 insertions(+)
 Committed and pushed.
+[master b01d1b3] auto: snapshot 2026-04-09
+ 8 files changed, 137 insertions(+), 77 deletions(-)
+ create mode 100644 claude-sessions/2026-04-08-evening-audit.md
+Committed and pushed.
