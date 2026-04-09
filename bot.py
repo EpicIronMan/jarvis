@@ -774,10 +774,15 @@ WRITE_TOOLS = {"write_sheet", "clear_row", "log_workout", "log_cardio", "log_wei
 
 
 def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> str:
-    """If the bot claims it wrote/updated data but made no write tool calls, append warning."""
+    """If the bot claims it wrote/updated data but made no write tool calls, append warning.
+
+    Only flags *present/future-tense* write claims. Past-tense references to earlier verified
+    writes (e.g. "PR logged", "already updated") are not flagged — the bot is allowed to
+    describe what it did previously.
+    """
+    # Only match present/future intent to write — not past-tense summaries
     action_phrases = (
-        r"i(?:'ve| have) (?:just |now )?(?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
-        r"(?:updated|fixed|corrected|logged|cleared|deleted|removed|saved|added|appended) (?:the|your|it|row|entry|data)",
+        r"i(?:'ve| have) (?:just |now )(?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
         r"let me (?:correct|fix|update|delete|remove|clear|log|save|add)",
         r"i (?:will|shall) (?:now )?(?:correct|fix|update|delete|remove|clear|log|save|add)",
     )
@@ -948,7 +953,16 @@ def load_conversation_from_logs() -> list[dict]:
         log.warning("Failed to load conversation history: %s", e)
     if len(conv) > MAX_CONVERSATION_MESSAGES:
         conv = conv[-MAX_CONVERSATION_MESSAGES:]
-    log.info("Loaded %d messages from today's log", len(conv))
+    if conv:
+        conv.insert(0, {
+            "role": "system",
+            "content": (
+                "[Conversation reloaded from earlier today. "
+                "Numbers in old messages (calories, weight, sleep, etc.) may be stale. "
+                "Always call read_sheet or sync_fitbit for current data before reporting stats.]"
+            ),
+        })
+    log.info("Loaded %d messages from today's log (capped from full day)", len(conv))
     return conv
 
 
