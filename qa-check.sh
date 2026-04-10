@@ -225,15 +225,14 @@ fi
 
 # --- Check 19: Git remote reachable ---
 cd "$REPO_DIR"
-if ! git ls-remote --exit-code origin HEAD > /dev/null 2>&1; then
-    # Check if pushes have been silently failing
-    LOCAL_HEAD=$(git rev-parse HEAD 2>/dev/null || true)
-    REMOTE_HEAD=$(git ls-remote origin HEAD 2>/dev/null | awk '{print $1}' || true)
-    if [ -n "$LOCAL_HEAD" ] && [ -n "$REMOTE_HEAD" ] && [ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]; then
-        flag_issue "git_remote_behind" "Git remote is behind local — pushes may be failing"
-    elif [ -z "$REMOTE_HEAD" ]; then
-        flag_issue "git_remote_unreachable" "Cannot reach git remote — backup is not updating"
-    fi
+# Compare local HEAD to remote HEAD to detect push failures.
+# Avoid git ls-remote twice — if first call fails, that IS the signal.
+LOCAL_HEAD=$(git rev-parse HEAD 2>/dev/null || true)
+REMOTE_HEAD=$(git ls-remote origin HEAD 2>/dev/null | awk '{print $1}' || true)
+if [ -z "$REMOTE_HEAD" ]; then
+    flag_issue "git_remote_unreachable" "Cannot reach git remote — backup is not updating"
+elif [ -n "$LOCAL_HEAD" ] && [ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]; then
+    flag_issue "git_remote_behind" "Git remote is behind local — pushes may be failing"
 fi
 
 # --- Check 20: Tool result errors not surfaced to user ---
