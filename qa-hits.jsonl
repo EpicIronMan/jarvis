@@ -22,3 +22,7 @@
 {"date":"2026-04-09","key":"no_convo_log","msg":"No conversation log for today (2026-04-09)"}
 {"date":"2026-04-09","key":"git_broken","msg":"Architecture: Git repo broken or missing"}
 {"date":"2026-04-09","key":"git_remote_unreachable","msg":"Cannot reach git remote — backup is not updating"}
+{"date":"2026-04-10","key":"no_convo_log","msg":"No conversation log for today (2026-04-10)"}
+{"date":"2026-04-10","key":"git_broken","msg":"Architecture: Git repo broken or missing"}
+{"date":"2026-04-10","key":"git_remote_unreachable","msg":"Cannot reach git remote — backup is not updating"}
+{"date":"2026-04-10","key":"memory_perms","msg":"memory.md owned by root (should be openclaw) — bot cannot write"}
