@@ -74,6 +74,12 @@ gog sheets get "$SHEET_ID" "Training Log!A:J" --account "$GOG_ACCT" | grep "YYYY
 |-------------|-----------|-----------------|
 | (fill per session) | YES/NO | YES/NO |
 
+**Blank row check:** For each tab that was written to today, scan column A for blank rows between data rows. Blank rows cause column drift on future writes.
+```bash
+gog sheets get "$SHEET_ID" "TAB!A:A" --account "$GOG_ACCT" -p
+```
+If blank rows exist between data rows, fix immediately (shift data up, clear orphan row).
+
 ---
 
 ## 5.5 Conversation Review & Soul/Memory Routing

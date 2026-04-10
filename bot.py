@@ -488,16 +488,24 @@ def _pdf_to_base64_images(
 
 
 def _find_next_row(tab: str) -> int | None:
-    """Find the next empty row in column A of a tab. Returns row number (1-based) or None on error."""
+    """Find the next empty row in column A of a tab. Returns row number (1-based) or None on error.
+    Also logs a warning if blank rows (gaps) exist between data rows."""
     output = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:A"])
     if output.startswith("ERROR"):
         return None
     lines = output.split("\n")
-    # Find last non-empty line — that's the last occupied row
     last_occupied = 0
+    gaps = []
+    in_data = False
     for i, line in enumerate(lines, start=1):
         if line.strip():
+            if in_data and i > last_occupied + 1:
+                gaps.extend(range(last_occupied + 1, i))
             last_occupied = i
+            in_data = True
+    if gaps:
+        logging.warning(f"Blank rows detected in {tab} column A at rows: {gaps}. "
+                        "These may cause issues with future writes or reads.")
     return last_occupied + 1
 
 
@@ -515,14 +523,20 @@ def _write_rows_to_sheet(tab: str, cols: str, rows: list[list[str]]) -> str:
 
 
 def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
-    """Read back the sheet and verify the write landed in the correct columns."""
-    check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:B", "-p"])
-    if check.startswith("ERROR"):
-        return "VERIFY FAILED: could not read sheet back"
-    for line in check.strip().split("\n"):
-        cols = line.split("\t")
-        if len(cols) >= 2 and expected_date in cols[0] and expected_field in cols[1]:
-            return "VERIFIED"
+    """Read back the sheet and verify the write landed in the correct columns.
+    Tries immediately, retries once after 2s if first attempt fails."""
+    for attempt in range(2):
+        if attempt == 1:
+            time.sleep(2)
+        check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:B", "-p"])
+        if check.startswith("ERROR"):
+            if attempt == 0:
+                continue
+            return "VERIFY FAILED: could not read sheet back"
+        for line in check.strip().split("\n"):
+            cols = line.split("\t")
+            if len(cols) >= 2 and expected_date in cols[0] and expected_field in cols[1]:
+                return "VERIFIED"
     return f"VERIFY FAILED: could not find {expected_date} with {expected_field} in columns A-B"
 
 
