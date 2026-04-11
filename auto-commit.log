@@ -417,3 +417,4 @@ fatal: Could not read from remote repository.
 Please make sure you have the correct access rights
 and the repository exists.
 auto-commit: push to origin/master FAILED
+No changes to commit.

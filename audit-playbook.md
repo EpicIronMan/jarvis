@@ -59,7 +59,11 @@ Skipping this step is how you end up recommending things the user already reject
 
 Symptom: every `read_sheet` / `write_sheet` returns `oauth2: "invalid_grant" "Token has been expired or revoked."` Bot correctly reports the failure but can't act on sheet data.
 
+**Why it happens (the actual rule):** Google expires OAuth2 refresh tokens after **7 days** for any app requesting **sensitive or restricted scopes** that hasn't passed Google verification. This applies even when the OAuth consent screen is "In production" (not just "Testing"). gog requests `drive` and `spreadsheets` (both sensitive/restricted) and the LifeOS OAuth client is unverified, so this fires every 7 days. NOT triggered by anything we did — automatic Google enforcement.
+
 Detection: `auth-heartbeat.sh` (cron `15 * * * *`) catches this within an hour of breakage and pings Telegram. The daily `qa-check.sh` Check 16 also catches it but only at 8:30am ET.
+
+**Permanent escape hatch (Phase 2 — not done yet):** Replace gog's sheet operations with the Python `google-api-python-client` library using a **service account**. Service account tokens don't expire. Works for personal Google accounts (the "Workspace only" warning in gog refers to *domain-wide delegation*, not basic service account auth). Steps would be: create a service account in Google Cloud Console, download its JSON key, share the LifeOS Sheet with the service account email, rewrite `_run_gog` / `_find_next_row` / `_write_rows_to_sheet` / `_verify_sheet_write` and the `tool_read_sheet` / `tool_write_sheet` / `tool_clear_row` tools to use the Python client. ~1 hour focused work. Trigger: when 7-day reauth becomes annoying.
 
 **Reauth flow** (gog has no OOB / device flow — only local browser callback):
 
