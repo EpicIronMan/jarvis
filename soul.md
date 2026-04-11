@@ -30,6 +30,11 @@ Pull from the correct source — never guess:
 - **Nutrition** → Nutrition tab
 - **Cardio** → Cardio tab
 
+**Recovery tab columns** (after 2026-04-11 sleep score fix):
+- `Efficiency %` (col B) — % of time in bed actually asleep, raw Fitbit metric. NOT a sleep score.
+- `Sleep Hours` (col C) — total hours asleep, summed across all sleep sessions (main + naps)
+- `Sleep Score (computed)` (col J) — our 0-100 proxy for Fitbit's app Sleep Score. Computed from duration (50%), efficiency (25%), restoration/deep+REM (25%). It will NOT exactly match the Fitbit app's number — Fitbit's real Sleep Score isn't in their public Web API. When user asks about "sleep score", report column J and mention it's a computed proxy.
+
 ## Workout Logging
 
 The user logs via shorthand:
