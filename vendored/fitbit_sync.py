@@ -274,6 +274,7 @@ def pull_sleep(tokens, cfg, dt):
 
     # Sum across ALL sleep sessions (main + naps)
     total_minutes_asleep = sum(s.get("minutesAsleep", 0) for s in sleeps)
+    total_time_in_bed = sum(s.get("timeInBed", 0) for s in sleeps)
     total_deep_min = 0
     total_light_min = 0
     total_rem_min = 0
@@ -286,6 +287,7 @@ def pull_sleep(tokens, cfg, dt):
         total_wake_min  += summary.get("wake",  {}).get("minutes", 0)
 
     hours = round(total_minutes_asleep / 60, 1) if total_minutes_asleep else 0
+    time_in_bed_h = round(total_time_in_bed / 60, 1) if total_time_in_bed else 0
 
     # Efficiency: weighted by minutesAsleep across all sessions, falls back to main's efficiency.
     # If user only had a main session, this just equals the main efficiency.
@@ -317,6 +319,7 @@ def pull_sleep(tokens, cfg, dt):
         "efficiency": str(efficiency),         # % of time in bed asleep (weighted across sessions)
         "computed_score": computed_score,      # 0-100 proxy of Fitbit's app Sleep Score
         "hours": str(hours),                   # TOTAL hours asleep across all sessions
+        "time_in_bed_h": str(time_in_bed_h),   # TOTAL hours in bed (raw) — includes wake time within sessions
         "stages": stage_str,
     }
 
@@ -354,19 +357,25 @@ def pull_activity(tokens, cfg, dt):
 def write_recovery(cfg, sleep_data, activity_data, dt):
     """Combine sleep + activity into one Recovery row.
 
-    Schema (10 columns A:J after 2026-04-11 sleep score fix):
+    Schema (11 columns A:K after 2026-04-11 sleep score fix + time-in-bed addition):
       A Date | B Efficiency % | C Sleep Hours | D Steps | E Active Minutes
       F HRV  | G Resting HR  | H Data Source | I Notes | J Sleep Score (computed)
+      K Time in Bed (h)
 
-    Column B was previously misnamed "Sleep Score" but always held efficiency (the
-    Fitbit Web API doesn't expose the real Sleep Score). Column J is our computed
-    proxy. See compute_sleep_score() docstring for the formula.
+    - Column B "Efficiency %" was previously misnamed "Sleep Score" but always held
+      efficiency (Fitbit Web API doesn't expose the real Sleep Score).
+    - Column C "Sleep Hours" = actual time asleep (sum of minutesAsleep across all
+      sleep sessions including naps).
+    - Column J "Sleep Score (computed)" is our 0-100 proxy. See compute_sleep_score().
+    - Column K "Time in Bed (h)" = raw period in bed (sum of timeInBed across all
+      sessions). Includes wake time within sessions. K - C = restless minutes.
     """
     ds = dt.strftime("%Y-%m-%d")
 
     efficiency_pct = sleep_data.get("efficiency", "") if sleep_data else ""
     computed_score = sleep_data.get("computed_score", "") if sleep_data else ""
     sleep_hours = sleep_data.get("hours", "") if sleep_data else ""
+    time_in_bed = sleep_data.get("time_in_bed_h", "") if sleep_data else ""
     stages = sleep_data.get("stages", "") if sleep_data else ""
     steps = activity_data.get("steps", "") if activity_data else ""
     active_mins = activity_data.get("active_mins", "") if activity_data else ""
@@ -378,7 +387,7 @@ def write_recovery(cfg, sleep_data, activity_data, dt):
     row = json.dumps([[
         ds,
         efficiency_pct, # B Efficiency % (raw Fitbit metric, % time in bed asleep)
-        sleep_hours,    # C Sleep Hours
+        sleep_hours,    # C Sleep Hours (actual asleep, all sessions summed)
         steps,          # D Steps
         active_mins,    # E Active Minutes
         "",             # F HRV — not in standard Fitbit API
@@ -386,9 +395,10 @@ def write_recovery(cfg, sleep_data, activity_data, dt):
         "FITBIT",       # H Data Source
         notes,          # I Notes (sleep stages + sync timestamp)
         computed_score, # J Sleep Score (computed proxy of Fitbit app score)
+        time_in_bed,    # K Time in Bed (h) — raw, includes wake time within sessions
     ]])
 
-    gog_sheets_upsert(cfg, "Recovery", ds, row, end_col="J")
+    gog_sheets_upsert(cfg, "Recovery", ds, row, end_col="K")
 
 
 def pull_nutrition(tokens, cfg, dt):

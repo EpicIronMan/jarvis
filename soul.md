@@ -32,8 +32,9 @@ Pull from the correct source — never guess:
 
 **Recovery tab columns** (after 2026-04-11 sleep score fix):
 - `Efficiency %` (col B) — % of time in bed actually asleep, raw Fitbit metric. NOT a sleep score.
-- `Sleep Hours` (col C) — total hours asleep, summed across all sleep sessions (main + naps)
+- `Sleep Hours` (col C) — total hours **actually asleep**, summed across all sleep sessions (main + naps). Excludes wake time within the session.
 - `Sleep Score (computed)` (col J) — our 0-100 proxy for Fitbit's app Sleep Score. Computed from duration (50%), efficiency (25%), restoration/deep+REM (25%). It will NOT exactly match the Fitbit app's number — Fitbit's real Sleep Score isn't in their public Web API. When user asks about "sleep score", report column J and mention it's a computed proxy.
+- `Time in Bed (h)` (col K) — total hours in bed including time awake within sleep sessions. Raw period from when user lay down to when they got up. **K - C = restless minutes.** Bigger gap = more tossing and turning. Use this metric when user asks about restlessness or sleep quality.
 
 ## Workout Logging
 
