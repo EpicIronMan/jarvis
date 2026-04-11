@@ -290,6 +290,36 @@ if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
     fi
 fi
 
+# --- Check 25: Said-failed-not-tried — bot claimed tool failure without trying it ---
+# Mirror of Check 22. After a backend fix, the bot can pattern-match on prior
+# failure messages in the conversation history and claim "still broken" without
+# actually calling the tool. Flag when assistant text mentions failure language
+# but the entry has zero tool calls.
+if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
+    FAILED_CLAIMS=$(python3 -c "
+import json, re, sys
+path = '$LOG_DIR/$TODAY.jsonl'
+fail_pat = re.compile(r'(?:token revoked|sheets? down|sheet access is down|cannot read|can.t read|auth.*broken|invalid.grant|access denied|permission denied|unable to.*sheet|backend fix|external fix needed)', re.I)
+n = 0
+try:
+    for line in open(path):
+        line = line.strip()
+        if not line: continue
+        try: e = json.loads(line)
+        except: continue
+        a = e.get('assistant') or ''
+        tools = e.get('tools') or []
+        if fail_pat.search(a) and len(tools) == 0:
+            n += 1
+except FileNotFoundError:
+    pass
+print(n)
+" 2>/dev/null) || FAILED_CLAIMS=0
+    if (( FAILED_CLAIMS > 0 )); then
+        flag_issue "said_failed_not_tried_$TODAY" "Bot claimed tool failure $FAILED_CLAIMS time(s) without making any tool call (likely model context bias from prior failures — user should /clear after backend fixes)"
+    fi
+fi
+
 # --- Check 24: Stale soul proposals ---
 PROPOSALS_FILE="$REPO_DIR/soul-proposals.jsonl"
 if [ -f "$PROPOSALS_FILE" ]; then

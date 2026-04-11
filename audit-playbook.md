@@ -48,7 +48,8 @@ Skipping this step is how you end up recommending things the user already reject
 
 - **`grep -c ... || echo 0`** in bash produces `"0\n0"` because `grep -c` outputs "0" AND exits 1 on no match. Use `VAR=$(cmd) || VAR=0` instead.
 - **Files become root-owned** every time Claude Code edits them (CC runs as root, bot runs as openclaw). qa-check.sh Check 21 catches it — but the cure is chowning at session end.
-- **`/home/openclaw/.openclaw/` is load-bearing.** It contains the gog binary (`/usr/local/bin/gog` is a symlink into it) and the Google auth keyring. **Never wholesale-delete it.** Only the `homebrew/` and `.config/gogcli/` subdirs matter; everything else inside it is OpenClaw cruft.
+- **`/home/openclaw/.openclaw/` is load-bearing.** It contains the gog binary (`/usr/local/bin/gog` is a symlink into it). **Never wholesale-delete it.** Only the `homebrew/` subdir matters now; the `.config/gogcli/` subdir was historically used too but is now a symlink to the canonical config (see next trap).
+- **gog has TWO config paths and they can drift.** The "real" gog config lives at `/home/openclaw/.config/gogcli/` (XDG default). A historical leftover at `/home/openclaw/.openclaw/workspace/.config/gogcli/` was used by some invocation paths (probably tied to the homebrew install location). After 2026-04-11 the second path is **symlinked** to the first so both routes hit the same fresh keyring. If you ever see `gog auth credentials list` showing `/home/openclaw/.config/gogcli/credentials.json` but the bot still gets `invalid_grant`, **check those symlinks** — if the `.openclaw/...` path has stale real files instead of symlinks to the canonical path, the bot is reading the stale token. Fix: `mv` the stale files to `.bak`, then `ln -sfn /home/openclaw/.config/gogcli/{keyring,credentials.json} <stale_path>/`.
 - **`/opt/openclaw.env` is load-bearing.** All cron jobs source it. Renaming requires touching crontab + service file + scripts in lockstep.
 - **The `openclaw` user account name is historical** (from the OpenClaw → bot.py rebuild on 2026-04-05). Treat it as "the lifeos service account." Renaming is purely cosmetic and high coordination cost.
 - **Cost optimization vs correctness.** Per the 2026-04-08 → 2026-04-11 cycle: dropping to a cheaper model saved cents and cost ~7 `bf_wrong_source` hits per week. Integrity > efficiency. Always.
@@ -83,3 +84,16 @@ Detection: `auth-heartbeat.sh` (cron `15 * * * *`) catches this within an hour o
 8. Verify with `gog sheets get "$SHEET_ID" "Body Metrics!A1:A1" --account "$GOG_ACCOUNT" --no-input`.
 
 **Speed matters** — gog times out after ~2-3 minutes. If it dies between user authorizing and you curling the code, restart from step 1 (the code is also single-use and expires in ~10 minutes).
+
+**Important: tell the user to `/clear` after reauth.** When the conversation history is full of "Sheets down" messages from the failure window, the model loads that history on next reply and may **claim sheets are still down without actually retrying the tool** (see `said_failed_not_tried` trap below). `/clear` wipes the in-memory conversation so the next message starts fresh.
+
+---
+
+## More traps
+
+- **`said_failed_not_tried` (model context bias).** After a backend failure has been resolved, the bot may continue claiming the failure for several messages because `load_conversation_from_logs` feeds the model recent assistant messages including the prior failure reports. The model then *pattern-matches* on the failure pattern and skips retrying the tool — generating a "still broken" response with **zero tool calls**. This is the mirror of `said_not_did` (claiming success without action). Mitigations:
+    1. **Tell the user to `/clear`** after any backend fix (gog reauth, key rotation, etc.) before re-testing.
+    2. **qa-check Check 25** flags this pattern: assistant messages mentioning "down/revoked/failed/can't/unable" with zero corresponding tool calls in the same exchange.
+    3. Long-term: bot.py could strip or downweight failure messages from `load_conversation_from_logs` output, but this is more complex and not yet implemented.
+
+- **Bot's loaded conversation history is sticky and can poison fresh attempts.** Whenever you fix a backend issue (auth, infra, config), explicitly invalidate the conversation context by having the user `/clear`. Restarting the bot service alone doesn't help because the history is reloaded from the log file on the first message after restart.
