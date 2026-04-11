@@ -144,6 +144,7 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- claude-sessions/                # Claude Code session summaries (for retrieval after terminal drops)
 |-- qa-hits.jsonl                   # QA check hit tracking (fed into monthly audit)
 |-- monthly-audit.sh                # 9am 1st-of-month architecture audit
+|-- auth-heartbeat.sh               # Hourly Google Sheets OAuth2 token heartbeat
 |-- auto-commit.sh                  # Hourly git commit + push (uses .repo.lock vs bot writes)
 |-- lifeos-bot.service              # systemd unit file (canonical copy of installed unit)
 |-- requirements.txt                # Python deps: openai, python-telegram-bot
@@ -309,6 +310,7 @@ files as the same user that owns the repo, eliminating ownership drift to root.
 |----------|--------|---------|
 | `0 7 * * *` ET | `morning-brief-ai.py` | Daily AI-generated Telegram morning brief |
 | `0 * * * *` | `auto-commit.sh` | Hourly git snapshot (with `.repo.lock` flock) |
+| `15 * * * *` | `auth-heartbeat.sh` | Hourly Google Sheets OAuth2 token heartbeat (alerts on first failure transition) |
 | `30 8 * * *` ET | `qa-check.sh` | Daily integrity check (alerts only on failure) |
 | `0 9 1 * *` ET | `monthly-audit.sh` | Monthly architecture audit report |
 
@@ -534,6 +536,7 @@ The audit should be run by an AI (Claude Code or the bot) reading the actual dat
 - **2026-04-08:** Added soul proposal pipeline (`propose_soul_change` tool → `soul-proposals.jsonl` → Claude Code review → soul.md). **Why:** "Tell Claude Code to update soul.md" pattern lost directives across sessions. Pipeline captures immediately and routes through review.
 - **2026-04-08:** Trimmed soul.md from 116 → ~50 LOC. **Why:** Heavy constraints were consuming model cognitive budget; user observed model performed better with minimal prompt + code-level monitoring than with long instructions. Monitoring stayed in bot.py (untouched).
 - **2026-04-09:** Switched all logging tools from `gog sheets append` to targeted `gog sheets update` via `_find_next_row`. **Why:** Append modes (INSERT_ROWS, OVERWRITE) caused column drift when blank rows existed in the sheet. Targeted updates bypass that class of bug entirely.
+- **2026-04-11 (auth heartbeat + OAuth2 reauth):** Google Sheets OAuth2 token was revoked (cause unknown — possibly external Google action). Reauth performed via the curl-the-failed-callback-URL trick (gog has no OOB flow). Added `auth-heartbeat.sh` running hourly via cron — closes the 24-hour blind window where qa-check Check 16 wouldn't catch a mid-day token revocation. Heartbeat uses a state file so it only alerts on transitions (good→bad and bad→good), not every hour. Reauth procedure documented in `audit-playbook.md`.
 - **2026-04-11 (OpenClaw cruft cleanup):** Removed leftover OpenClaw installation from outside the lifeos repo. Deleted: `/usr/lib/node_modules/openclaw` (1.4 GB npm package + 13 extensions), `/etc/systemd/system/openclaw.service` (orphan, was disabled+inactive), `/etc/config/openclaw.json` (Docker sandbox config), and 6 `/opt/openclaw-*.sh` wrapper scripts. **Kept** (load-bearing): `/opt/openclaw.env` (active env file), `~/.openclaw/workspace/homebrew/` (gog binary), `~/.openclaw/workspace/.config/gogcli/` (Google auth keyring). **1.3 GB freed.**
 - **2026-04-11 (lean sweep):** Architecture audit and consolidation pass. **Cron migrated root → openclaw** (eliminated ownership-drift class at the source). **Model reverted** GPT-4.1-mini → Grok 4.1 fast (integrity > efficiency — Category 2 hallucinations spiked after 04-08 swap). **resolved.jsonl substring bug fixed** (was silently auto-resolving date-suffixed keys). **auto-commit/morning-brief silent failures made loud.** **bot.py log_* functions deduplicated** into one `_write_and_verify` helper. **qa-check.sh hardened** (Check 9b removed, Check 21 expanded, Checks 15+18 merged, integer arithmetic pattern fixed). **daily-audit-template.md rewritten** 252 → 61 LOC (kept only manual-only sections). **Routine moved soul.md → memory.md** (one source of truth for facts about user). **History archived** to `history-archive.md` to stop arch.md growing forever. **SSH deploy key set up** for openclaw → GitHub. See `decisions.log` 2026-04-11 entries for full reasoning. Tactical details in commit history.
 

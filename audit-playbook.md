@@ -52,3 +52,30 @@ Skipping this step is how you end up recommending things the user already reject
 - **`/opt/openclaw.env` is load-bearing.** All cron jobs source it. Renaming requires touching crontab + service file + scripts in lockstep.
 - **The `openclaw` user account name is historical** (from the OpenClaw → bot.py rebuild on 2026-04-05). Treat it as "the lifeos service account." Renaming is purely cosmetic and high coordination cost.
 - **Cost optimization vs correctness.** Per the 2026-04-08 → 2026-04-11 cycle: dropping to a cheaper model saved cents and cost ~7 `bf_wrong_source` hits per week. Integrity > efficiency. Always.
+
+---
+
+## OAuth2 reauth procedure (when `gog` token is revoked)
+
+Symptom: every `read_sheet` / `write_sheet` returns `oauth2: "invalid_grant" "Token has been expired or revoked."` Bot correctly reports the failure but can't act on sheet data.
+
+Detection: `auth-heartbeat.sh` (cron `15 * * * *`) catches this within an hour of breakage and pings Telegram. The daily `qa-check.sh` Check 16 also catches it but only at 8:30am ET.
+
+**Reauth flow** (gog has no OOB / device flow — only local browser callback):
+
+1. Start gog login in the **background** (not foreground — it dies when the parent shell returns):
+   ```
+   sudo -n -u openclaw bash -c '. /opt/openclaw.env && export GOG_KEYRING_PASSWORD GOG_ACCOUNT && nohup /usr/local/bin/gog login "$GOG_ACCOUNT" > /tmp/gog-login-output.txt 2>&1 &'
+   ```
+2. Read the auth URL from `/tmp/gog-login-output.txt` and give it to the user. Note the `127.0.0.1:PORT` callback in the URL — that port is what gog is listening on.
+3. User opens the URL in any browser, signs in, clicks Allow.
+4. Their browser redirects to `http://127.0.0.1:PORT/oauth2/callback?code=...` and **fails to load** ("connection refused") because their browser's loopback ≠ the box's loopback. **This is expected.**
+5. **The OAuth code is sitting in the browser's address bar** even though the page failed. User copies the entire failed URL.
+6. From the box, `curl` that exact URL — `127.0.0.1:PORT` IS reachable from the box itself, so the code reaches gog:
+   ```
+   curl -sS '<the failed URL>' -o /dev/null -w "HTTP %{http_code}\n"
+   ```
+7. HTTP 200 = success. `cat /tmp/gog-login-output.txt` should now show "Authorization received. Finishing…" and the email + services list.
+8. Verify with `gog sheets get "$SHEET_ID" "Body Metrics!A1:A1" --account "$GOG_ACCOUNT" --no-input`.
+
+**Speed matters** — gog times out after ~2-3 minutes. If it dies between user authorizing and you curling the code, restart from step 1 (the code is also single-use and expires in ~10 minutes).
