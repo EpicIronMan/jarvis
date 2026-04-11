@@ -51,8 +51,8 @@ fi
 
 # --- Check 2: Tool verification failures in today's log ---
 if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
-    FAILS=$(grep -c "VERIFY FAILED" "$LOG_DIR/$TODAY.jsonl" 2>/dev/null || true)
-    if [ "$FAILS" -gt 0 ]; then
+    FAILS=$(grep -c "VERIFY FAILED" "$LOG_DIR/$TODAY.jsonl" 2>/dev/null) || FAILS=0
+    if (( FAILS > 0 )); then
         flag_issue "verify_failed_$TODAY" "$FAILS tool verification failures today"
     fi
 fi
@@ -60,15 +60,15 @@ fi
 # --- Check 3: Yesterday's training log exists (unless Sunday off) ---
 YESTERDAY_DOW=$(TZ=America/Toronto date -d "yesterday" +%A)
 if [ "$YESTERDAY_DOW" != "Sunday" ]; then
-    TRAINING=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Training Log!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null | grep -c "$YESTERDAY" || true)
-    if [ "$TRAINING" -eq 0 ]; then
+    TRAINING=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Training Log!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null | grep -c "$YESTERDAY") || TRAINING=0
+    if (( TRAINING == 0 )); then
         flag_issue "no_training_$YESTERDAY" "No training logged for yesterday ($YESTERDAY, $YESTERDAY_DOW)"
     fi
 fi
 
 # --- Check 4: Yesterday's nutrition exists ---
-NUTRITION=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Nutrition!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null | grep -c "$YESTERDAY" || true)
-if [ "$NUTRITION" -eq 0 ]; then
+NUTRITION=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Nutrition!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null | grep -c "$YESTERDAY") || NUTRITION=0
+if (( NUTRITION == 0 )); then
     flag_issue "no_nutrition_$YESTERDAY" "No nutrition logged for yesterday ($YESTERDAY)"
 fi
 
@@ -98,15 +98,15 @@ if [ -f "$YESTERDAY_LOG" ]; then
         fi
     fi
 
-    SAVE_CLAIMS=$(grep -o '"save_memory"' "$YESTERDAY_LOG" 2>/dev/null | wc -l || true)
-    SAVE_PROMISES=$(grep -oi 'update.*changelog\|save.*to.*memory\|update.*memory' "$YESTERDAY_LOG" 2>/dev/null | wc -l || true)
-    if [ "$SAVE_PROMISES" -gt "$SAVE_CLAIMS" ] && [ "$SAVE_CLAIMS" -gt 0 ]; then
+    SAVE_CLAIMS=$(grep -o '"save_memory"' "$YESTERDAY_LOG" 2>/dev/null | wc -l) || SAVE_CLAIMS=0
+    SAVE_PROMISES=$(grep -oi 'update.*changelog\|save.*to.*memory\|update.*memory' "$YESTERDAY_LOG" 2>/dev/null | wc -l) || SAVE_PROMISES=0
+    if (( SAVE_PROMISES > SAVE_CLAIMS && SAVE_CLAIMS > 0 )); then
         flag_issue "hallucinated_saves_$YESTERDAY" "Procedure: Bot promised more saves than executed ($SAVE_PROMISES claimed, $SAVE_CLAIMS done)"
     fi
 
     if grep -qi "how did I do\|status report\|my stats\|morning report" "$YESTERDAY_LOG" 2>/dev/null; then
-        TABS_READ=$(grep -o '"tab"[[:space:]]*:[[:space:]]*"[^"]*"' "$YESTERDAY_LOG" 2>/dev/null | sort -u | wc -l || true)
-        if [ "$TABS_READ" -lt 3 ]; then
+        TABS_READ=$(grep -o '"tab"[[:space:]]*:[[:space:]]*"[^"]*"' "$YESTERDAY_LOG" 2>/dev/null | sort -u | wc -l) || TABS_READ=0
+        if (( TABS_READ < 3 )); then
             flag_issue "incomplete_report_$YESTERDAY" "Procedure: Status report only read $TABS_READ sheet tabs (expected 3+)"
         fi
     fi
@@ -133,8 +133,8 @@ for f in "$REPO_DIR"/memory/*.md; do
     age_days=$(( ($(date +%s) - $(stat -c %Y "$f")) / 86400 ))
     if [ "$age_days" -gt 30 ]; then
         # Check if any log in last 7 days references this file
-        recent_use=$(grep -rl "$fname" "$LOG_DIR"/ 2>/dev/null | tail -7 | wc -l || true)
-        if [ "$recent_use" -eq 0 ]; then
+        recent_use=$(grep -rl "$fname" "$LOG_DIR"/ 2>/dev/null | tail -7 | wc -l) || recent_use=0
+        if (( recent_use == 0 )); then
             flag_issue "stale_memory_$fname" "Orphan: memory/$fname not modified in ${age_days}d and not referenced in recent logs"
         fi
     fi
@@ -155,8 +155,8 @@ fi
 if ! git status --porcelain > /dev/null 2>&1; then
     flag_issue "git_broken" "Architecture: Git repo broken or missing"
 else
-    UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l || true)
-    if [ "$UNCOMMITTED" -gt 20 ]; then
+    UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l) || UNCOMMITTED=0
+    if (( UNCOMMITTED > 20 )); then
         flag_issue "git_uncommitted" "Architecture: $UNCOMMITTED uncommitted changes (auto-commit may be failing)"
     fi
 fi
@@ -165,8 +165,8 @@ fi
 BRIEF_LOG="$REPO_DIR/morning-brief.log"
 if [ -f "$BRIEF_LOG" ]; then
     # Log appends "Morning brief sent (Nnn chars)" on success
-    BRIEF_SENT=$(tail -1 "$BRIEF_LOG" 2>/dev/null | grep -c "Morning brief sent" || true)
-    if [ "$BRIEF_SENT" -eq 0 ]; then
+    BRIEF_SENT=$(tail -1 "$BRIEF_LOG" 2>/dev/null | grep -c "Morning brief sent") || BRIEF_SENT=0
+    if (( BRIEF_SENT == 0 )); then
         flag_issue "brief_not_sent" "Morning brief did not send today (check morning-brief.log)"
     fi
 else
@@ -238,32 +238,35 @@ fi
 # --- Check 20: Tool result errors not surfaced to user ---
 if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
     # Look for Permission denied, ERROR, FAILED in tool results where bot didn't tell user
-    TOOL_ERRORS=$(grep -oP '"result"\s*:\s*"[^"]*(?:Permission denied|ERROR|FAILED)[^"]*"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
-    if [ "$TOOL_ERRORS" -gt 0 ]; then
+    TOOL_ERRORS=$(grep -oP '"result"\s*:\s*"[^"]*(?:Permission denied|ERROR|FAILED)[^"]*"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l) || TOOL_ERRORS=0
+    if (( TOOL_ERRORS > 0 )); then
         # Check if bot mentioned the error to user
-        ERROR_MENTIONS=$(grep -ci "permission denied\|error.*tool\|failed.*save\|could not write" "$LOG_DIR/$TODAY.jsonl" 2>/dev/null || true)
-        if [ "$TOOL_ERRORS" -gt "$ERROR_MENTIONS" ]; then
+        ERROR_MENTIONS=$(grep -ci "permission denied\|error.*tool\|failed.*save\|could not write" "$LOG_DIR/$TODAY.jsonl" 2>/dev/null) || ERROR_MENTIONS=0
+        if (( TOOL_ERRORS > ERROR_MENTIONS )); then
             flag_issue "silent_tool_errors_$TODAY" "$TOOL_ERRORS tool errors today, only $ERROR_MENTIONS surfaced to user"
         fi
     fi
 fi
 
-# --- Check 21: Memory file permissions ---
-MEMORY_FILE="$REPO_DIR/memory/memory.md"
-if [ -f "$MEMORY_FILE" ]; then
-    MEMORY_OWNER=$(stat -c '%U' "$MEMORY_FILE")
-    if [ "$MEMORY_OWNER" != "openclaw" ]; then
-        flag_issue "memory_perms" "memory.md owned by $MEMORY_OWNER (should be openclaw) — bot cannot write"
+# --- Check 21: File ownership drift (bot can't write files owned by root) ---
+# Any file the bot or cron jobs need to write must be owned by openclaw.
+for f in memory/memory.md architecture.md bot.py daily-audit-template.md soul.md procedures.md soul-proposals.jsonl; do
+    path="$REPO_DIR/$f"
+    [ -f "$path" ] || continue
+    owner=$(stat -c '%U' "$path")
+    if [ "$owner" != "openclaw" ]; then
+        key="ownership_$(echo "$f" | tr '/.' '__')"
+        flag_issue "$key" "$f owned by $owner (should be openclaw) — bot cannot write"
     fi
-fi
+done
 
 # --- Check 22: Said-vs-did — bot claimed actions without matching tool calls ---
 if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
     # Count times bot said "logged" or "saved" in assistant text
-    CLAIMED=$(grep -oP '"assistant"\s*:\s*"[^"]*(?:Logged|logged|Saved|saved to memory|saved to sheet)[^"]*"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
+    CLAIMED=$(grep -oP '"assistant"\s*:\s*"[^"]*(?:Logged|logged|Saved|saved to memory|saved to sheet)[^"]*"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l) || CLAIMED=0
     # Count actual tool calls
-    TOOL_CALLS=$(grep -oP '"tool"\s*:\s*"(?:log_workout|log_weight|log_nutrition|save_memory|write_sheet)"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
-    if [ "$CLAIMED" -gt 0 ] && [ "$TOOL_CALLS" -eq 0 ]; then
+    TOOL_CALLS=$(grep -oP '"tool"\s*:\s*"(?:log_workout|log_weight|log_nutrition|save_memory|write_sheet)"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l) || TOOL_CALLS=0
+    if (( CLAIMED > 0 && TOOL_CALLS == 0 )); then
         flag_issue "said_not_did_$TODAY" "Bot claimed $CLAIMED log/save actions but made $TOOL_CALLS tool calls"
     fi
 fi
@@ -271,10 +274,10 @@ fi
 # --- Check 23: Exercise count mismatch — bot's stated total vs actual logged exercises ---
 if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
     # Count unique exercise names the bot mentioned logging
-    EXERCISES_MENTIONED=$(grep -oP '"assistant"[^}]*(?:Pull Ups|Lat Pull|Cable Row|Reverse Pec|Preacher|Treadmill|Bench|Squat|Leg Press|Leg Curl|Leg Extension|Shoulder Press|Cable Fl|Cable Raise|Captain Chair)[^"]*logged' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
+    EXERCISES_MENTIONED=$(grep -oP '"assistant"[^}]*(?:Pull Ups|Lat Pull|Cable Row|Reverse Pec|Preacher|Treadmill|Bench|Squat|Leg Press|Leg Curl|Leg Extension|Shoulder Press|Cable Fl|Cable Raise|Captain Chair)[^"]*logged' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l) || EXERCISES_MENTIONED=0
     # Count actual log_workout calls
-    EXERCISES_LOGGED=$(grep -oP '"tool"\s*:\s*"log_workout"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || true)
-    if [ "$EXERCISES_MENTIONED" -gt 0 ] && [ "$EXERCISES_LOGGED" -eq 0 ]; then
+    EXERCISES_LOGGED=$(grep -oP '"tool"\s*:\s*"log_workout"' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l) || EXERCISES_LOGGED=0
+    if (( EXERCISES_MENTIONED > 0 && EXERCISES_LOGGED == 0 )); then
         flag_issue "exercises_not_logged_$TODAY" "Bot discussed logging exercises but no log_workout calls found"
     fi
 fi
@@ -282,10 +285,10 @@ fi
 # --- Check 24: Stale soul proposals ---
 PROPOSALS_FILE="$REPO_DIR/soul-proposals.jsonl"
 if [ -f "$PROPOSALS_FILE" ]; then
-    PENDING=$(grep -c '"status"[^}]*"pending"' "$PROPOSALS_FILE" 2>/dev/null || true)
-    AWAITING=$(grep -c '"status"[^}]*"awaiting_user"' "$PROPOSALS_FILE" 2>/dev/null || true)
+    PENDING=$(grep -c '"status"[^}]*"pending"' "$PROPOSALS_FILE" 2>/dev/null) || PENDING=0
+    AWAITING=$(grep -c '"status"[^}]*"awaiting_user"' "$PROPOSALS_FILE" 2>/dev/null) || AWAITING=0
     STALE_COUNT=$((PENDING + AWAITING))
-    if [ "$STALE_COUNT" -gt 5 ]; then
+    if (( STALE_COUNT > 5 )); then
         flag_issue "stale_soul_proposals" "$STALE_COUNT pending/awaiting soul proposals — review may not be running or user not responding"
     fi
 fi
