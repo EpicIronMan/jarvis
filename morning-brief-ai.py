@@ -6,11 +6,13 @@ Runs via cron at 7am ET. Costs a few tokens (~$0.01) per run.
 """
 
 import os
+import sys
 import json
 import subprocess
 import datetime
 import pathlib
 import urllib.request
+import urllib.parse
 
 # --- Config from env ---
 SOUL_PATH = pathlib.Path("/home/openclaw/lifeos/soul.md")
@@ -87,7 +89,7 @@ def call_ai(prompt, system):
 
 
 def send_telegram(text):
-    """Send a message via Telegram Bot API."""
+    """Send a message via Telegram Bot API. Raises on network failure."""
     data = urllib.parse.urlencode({
         "chat_id": CHAT_ID,
         "parse_mode": "Markdown",
@@ -97,9 +99,11 @@ def send_telegram(text):
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
         data=data,
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:
         result = json.loads(resp.read())
-        return result.get("ok", False)
+        if not result.get("ok"):
+            raise RuntimeError(f"Telegram API rejected message: {result}")
+        return True
 
 
 def main():
@@ -155,18 +159,28 @@ Be concise but human. This is read on a phone first thing in the morning.
 """
 
     # Generate brief
-    brief = call_ai(user_prompt, system_prompt)
+    try:
+        brief = call_ai(user_prompt, system_prompt)
+    except Exception as e:
+        # qa-check.sh Check 12 looks for "Morning brief sent" in last line of
+        # this log. Anything else triggers the brief_not_sent alert.
+        print(f"Morning brief FAILED: AI call errored: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    # Send
-    if brief:
-        # Telegram has 4096 char limit
+    if not brief:
+        print("Morning brief FAILED: AI returned empty response", file=sys.stderr)
+        sys.exit(1)
+
+    # Send (Telegram has a 4096 char limit per message)
+    try:
         for i in range(0, len(brief), 4096):
             send_telegram(brief[i:i+4096])
-        print(f"Morning brief sent ({len(brief)} chars)")
-    else:
-        print("AI returned empty response")
+    except Exception as e:
+        print(f"Morning brief FAILED: Telegram send errored: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Morning brief sent ({len(brief)} chars)")
 
 
 if __name__ == "__main__":
-    import urllib.parse
     main()

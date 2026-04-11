@@ -25,10 +25,16 @@ export GOG_ACCOUNT="$GOG_ACCT"
 export GOG_KEYRING_PASSWORD="${GOG_KEYRING_PASSWORD:-}"
 
 # --- Helper: check if an issue key is already resolved ---
+# Match exact key only — substring match would let "no_training" auto-resolve
+# "no_training_2026-04-05" etc. The trailing literal pattern requires the
+# closing quote to come right after the key.
 is_resolved() {
     local key="$1"
-    if [ -f "$RESOLVED_FILE" ] && grep -q "\"key\":\"$key\"" "$RESOLVED_FILE" 2>/dev/null; then
+    if [ -f "$RESOLVED_FILE" ] && grep -qF "\"key\":\"$key\"," "$RESOLVED_FILE" 2>/dev/null; then
         return 0  # resolved
+    fi
+    if [ -f "$RESOLVED_FILE" ] && grep -qF "\"key\":\"$key\"}" "$RESOLVED_FILE" 2>/dev/null; then
+        return 0  # resolved (last field on line)
     fi
     return 1  # not resolved
 }
@@ -121,10 +127,8 @@ for dir in "$REPO_DIR"/*/; do
     fi
 done
 
-# Old OpenClaw service still enabled
-if systemctl is-enabled --quiet openclaw 2>/dev/null; then
-    flag_issue "orphan_openclaw_service" "Orphan: openclaw.service still enabled (replaced by lifeos-bot)"
-fi
+# (removed: Check 9b orphan_openclaw_service — migration completed 2026-04-05,
+# never fired in qa-hits, deleted 2026-04-11 audit pass)
 
 # Memory files older than 30 days with no recent reads in logs
 for f in "$REPO_DIR"/memory/*.md; do
@@ -185,13 +189,25 @@ if [ "$MEM_PCT" -gt 85 ]; then
     flag_issue "ram_high" "RAM usage at ${MEM_PCT}% (threshold 85%)"
 fi
 
-# --- Check 15: Fitbit data freshness (not just timer running) ---
-RECOVERY_LATEST=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Recovery!A:A" --account "$GOG_ACCT" --no-input 2>/dev/null \
-    | grep -oP '^\d{4}-\d{2}-\d{2}' | sort | tail -1 || true)
+# --- Check 15+18: Fitbit + sleep freshness (one fetch, two signals) ---
+# Fitbit health check has two failure modes that need different alerts:
+#   (a) No Recovery rows at all → sync is broken
+#   (b) Rows exist but sleep score column blank → ring/watch not worn
+# Previously two separate gog calls; merged into one read 2026-04-11.
+RECOVERY_DATA=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Recovery!A:B" --account "$GOG_ACCT" --no-input 2>/dev/null) || RECOVERY_DATA=""
+RECOVERY_LATEST=$(echo "$RECOVERY_DATA" | grep -oP '^\d{4}-\d{2}-\d{2}' | sort | tail -1 || true)
 if [ -n "$RECOVERY_LATEST" ]; then
     RECOVERY_AGE=$(( ($(date +%s) - $(date -d "$RECOVERY_LATEST" +%s)) / 86400 ))
-    if [ "$RECOVERY_AGE" -gt 2 ]; then
+    if (( RECOVERY_AGE > 2 )); then
         flag_issue "fitbit_stale" "Fitbit data stale: last Recovery entry is $RECOVERY_LATEST (${RECOVERY_AGE}d ago)"
+    fi
+    # Sleep score check only meaningful if Fitbit syncing at all
+    SLEEP_LATEST=$(echo "$RECOVERY_DATA" | grep -P '^\d{4}-\d{2}-\d{2}\s+\d' | tail -1 | awk '{print $1}' || true)
+    if [ -n "$SLEEP_LATEST" ]; then
+        SLEEP_AGE=$(( ($(date +%s) - $(date -d "$SLEEP_LATEST" +%s)) / 86400 ))
+        if (( SLEEP_AGE > 2 )); then
+            flag_issue "sleep_stale" "Sleep data stale: last scored night is $SLEEP_LATEST (${SLEEP_AGE}d ago) — ring/watch may not be worn"
+        fi
     fi
 else
     flag_issue "fitbit_no_data" "Could not read Recovery tab — Fitbit data may be missing"
@@ -211,16 +227,6 @@ if systemctl is-active --quiet caddy; then
     fi
 else
     flag_issue "caddy_down" "Caddy service is not running"
-fi
-
-# --- Check 18: Sleep data freshness ---
-SLEEP_LATEST=$(HOME=/home/openclaw "$GOG" sheets get "$SHEET_ID" "Recovery!A:B" --account "$GOG_ACCT" --no-input 2>/dev/null \
-    | grep -P '^\d{4}-\d{2}-\d{2}\s+\d' | tail -1 | awk '{print $1}' || true)
-if [ -n "$SLEEP_LATEST" ]; then
-    SLEEP_AGE=$(( ($(date +%s) - $(date -d "$SLEEP_LATEST" +%s)) / 86400 ))
-    if [ "$SLEEP_AGE" -gt 2 ]; then
-        flag_issue "sleep_stale" "Sleep data stale: last scored night is $SLEEP_LATEST (${SLEEP_AGE}d ago) — ring/watch may not be worn"
-    fi
 fi
 
 # --- Check 19: Git remote reachable ---
@@ -250,7 +256,9 @@ fi
 
 # --- Check 21: File ownership drift (bot can't write files owned by root) ---
 # Any file the bot or cron jobs need to write must be owned by openclaw.
-for f in memory/memory.md architecture.md bot.py daily-audit-template.md soul.md procedures.md soul-proposals.jsonl; do
+# After 2026-04-11 audit, all cron jobs run as openclaw, so this should now
+# only fire if Claude Code (root) edited a repo file directly.
+for f in memory/memory.md architecture.md bot.py daily-audit-template.md soul.md soul-proposals.jsonl resolved.jsonl decisions.log; do
     path="$REPO_DIR/$f"
     [ -f "$path" ] || continue
     owner=$(stat -c '%U' "$path")

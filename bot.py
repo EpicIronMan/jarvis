@@ -540,6 +540,19 @@ def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> st
     return f"VERIFY FAILED: could not find {expected_date} with {expected_field} in columns A-B"
 
 
+def _write_and_verify(tab: str, rows: list[list[str]], expected_field: str, kind: str) -> str:
+    """Write rows to a sheet tab and verify the last row landed correctly.
+    Returns 'VERIFIED' on success, or a user-facing 'WRITE FAILED ...' message
+    on any failure (so callers can return it directly to the model)."""
+    result = _write_rows_to_sheet(tab, "I", rows)
+    if result.startswith("ERROR"):
+        return result
+    verify = _verify_sheet_write(tab, _today(), expected_field)
+    if verify != "VERIFIED":
+        return f"WRITE FAILED for {kind} — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
+    return "VERIFIED"
+
+
 def tool_log_workout(data: dict) -> str:
     exercises = data["exercises"]
     session_type = data.get("session_type", "BRO_SPLIT")
@@ -554,30 +567,24 @@ def tool_log_workout(data: dict) -> str:
             str(ex["weight_lbs"]), str(ex.get("rpe", "")),
             str(volume), session_type, "TELEGRAM",
         ])
-    result = _write_rows_to_sheet("Training Log", "I", rows)
-    if result.startswith("ERROR"):
-        return result
-    verify = _verify_sheet_write("Training Log", date, exercises[-1]["name"])
-    if verify != "VERIFIED":
-        return f"WRITE FAILED for {len(exercises)} exercises — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
-    return f"Logged {len(exercises)} exercises, total volume: {total_volume:,} lbs. [{verify}]"
+    status = _write_and_verify("Training Log", rows, exercises[-1]["name"], f"{len(exercises)} exercises")
+    if status != "VERIFIED":
+        return status
+    return f"Logged {len(exercises)} exercises, total volume: {total_volume:,} lbs. [VERIFIED]"
 
 
 def tool_log_cardio(data: dict) -> str:
     date = _today()
-    row = [[
+    rows = [[
         date, data["exercise"], str(data["duration_min"]),
         str(data.get("speed", "")), str(data.get("incline", "")),
         str(data["net_calories"]), str(data["met_used"]),
         "TELEGRAM", data.get("notes", ""),
     ]]
-    result = _write_rows_to_sheet("Cardio", "I", row)
-    if result.startswith("ERROR"):
-        return result
-    verify = _verify_sheet_write("Cardio", date, data["exercise"])
-    if verify != "VERIFIED":
-        return f"WRITE FAILED for cardio — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
-    return f"Logged cardio: {data['exercise']} {data['duration_min']}min, {data['net_calories']} net cal (MET {data['met_used']}). [{verify}]"
+    status = _write_and_verify("Cardio", rows, data["exercise"], "cardio")
+    if status != "VERIFIED":
+        return status
+    return f"Logged cardio: {data['exercise']} {data['duration_min']}min, {data['net_calories']} net cal (MET {data['met_used']}). [VERIFIED]"
 
 
 def tool_log_weight(data: dict) -> str:
@@ -587,31 +594,25 @@ def tool_log_weight(data: dict) -> str:
     bf = str(data.get("body_fat_pct", ""))
     source = data.get("data_source", "RENPHO")
     notes = data.get("notes", "")
-    row = [[date, str(lbs), str(kg), bf, "", "", "", source, notes]]
-    result = _write_rows_to_sheet("Body Metrics", "I", row)
-    if result.startswith("ERROR"):
-        return result
-    verify = _verify_sheet_write("Body Metrics", date, str(lbs))
-    if verify != "VERIFIED":
-        return f"WRITE FAILED for weight — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
-    return f"Logged weight: {lbs} lbs ({kg} kg) on {date}. [{verify}]"
+    rows = [[date, str(lbs), str(kg), bf, "", "", "", source, notes]]
+    status = _write_and_verify("Body Metrics", rows, str(lbs), "weight")
+    if status != "VERIFIED":
+        return status
+    return f"Logged weight: {lbs} lbs ({kg} kg) on {date}. [VERIFIED]"
 
 
 def tool_log_nutrition(data: dict) -> str:
     date = _today()
-    row = [[
+    rows = [[
         date, str(data["calories"]), str(data["protein_g"]),
         str(data.get("carbs_g", "")), str(data.get("fat_g", "")),
         str(data.get("fiber_g", "")), str(data.get("sodium_mg", "")),
         data.get("data_source", "MFP"), data.get("notes", ""),
     ]]
-    result = _write_rows_to_sheet("Nutrition", "I", row)
-    if result.startswith("ERROR"):
-        return result
-    verify = _verify_sheet_write("Nutrition", date, str(data["calories"]))
-    if verify != "VERIFIED":
-        return f"WRITE FAILED for nutrition — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
-    return f"Logged nutrition for {date}: {data['calories']} cal, {data['protein_g']}g protein. [{verify}]"
+    status = _write_and_verify("Nutrition", rows, str(data["calories"]), "nutrition")
+    if status != "VERIFIED":
+        return status
+    return f"Logged nutrition for {date}: {data['calories']} cal, {data['protein_g']}g protein. [VERIFIED]"
 
 
 def tool_read_sheet(data: dict) -> str:

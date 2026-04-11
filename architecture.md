@@ -130,9 +130,10 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 /home/openclaw/lifeos/              <-- git repo root + GitHub mirror
 |-- bot.py                          # The Telegram bot (entire application)
 |-- soul.md                         # AI system prompt (personality, rules, sheet schemas)
-|-- morning-brief.sh                # Daily 7am ET cron script (standalone, not part of bot)
+|-- morning-brief-ai.py             # 7am ET AI-generated Telegram brief (cron, openclaw)
 |-- architecture.md                 # This file (system map for any AI/human)
 |-- (procedures.md removed 2026-04-07 — consolidated into soul.md)
+|-- (morning-brief.sh removed 2026-04-11 — superseded by morning-brief-ai.py)
 |-- qa-check.sh                     # Daily integrity + procedure compliance check
 |-- resolve.sh                      # CLI tool to mark QA issues as resolved
 |-- resolved.jsonl                  # Log of resolved QA issues (checked before alerting)
@@ -140,12 +141,13 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- daily-audit-template.md         # End-of-day Claude Code audit checklist
 |-- claude-sessions/                # Claude Code session summaries (for retrieval after terminal drops)
 |-- qa-hits.jsonl                   # QA check hit tracking (fed into monthly audit)
-|-- auto-commit.sh                  # Hourly git commit + push to GitHub
-|-- lifeos-bot.service              # systemd unit file (canonical copy)
+|-- monthly-audit.sh                # 9am 1st-of-month architecture audit
+|-- auto-commit.sh                  # Hourly git commit + push (uses .repo.lock vs bot writes)
+|-- lifeos-bot.service              # systemd unit file (canonical copy of installed unit)
 |-- requirements.txt                # Python deps: openai, python-telegram-bot
 |-- openclaw.env.example            # Env var template (no real secrets)
 |-- soul-proposals.jsonl             # Pending/processed soul.md change proposals
-|-- review-soul-proposals.py        # Daily reviewer for soul proposals (8pm ET cron)
+|-- review-soul-proposals.py        # Reviewer for soul proposals (NOT currently scheduled)
 |-- audit-state.json                # Bookmark state for audit tiers (daily/weekly/monthly)
 |-- .gitignore                      # Excludes logs/, uploads/, venv/
 |-- memory/                         # AI-writable persistent state (markdown files)
@@ -208,8 +210,8 @@ AI-powered morning brief, completely independent of the bot. Sends a daily Teleg
 - Pending soul proposals count (reminds user to review if >0)
 - A motivational line
 
-**Schedule:** `CRON_TZ=America/Toronto 0 7 * * *` (root crontab)
-**Dedup:** Lock file at `/tmp/morning-brief-YYYY-MM-DD.sent`
+**Schedule:** `0 7 * * *` ET (openclaw crontab — migrated from root 2026-04-11)
+**Failure handling:** Exits non-zero on AI or Telegram failure; qa-check.sh Check 12 reads `morning-brief.log` next morning and re-alerts if last line isn't `Morning brief sent`.
 
 ### 3. System Prompt (`soul.md`)
 
@@ -227,9 +229,11 @@ Read by bot.py at startup. Edit this file to change the AI's behavior. Restart t
 
 ### 4. Auto-Commit (`auto-commit.sh`)
 
-Runs hourly via cron. Commits any changes in the repo (memory files the bot writes, manual edits, etc.) with message `auto: daily snapshot YYYY-MM-DD`. Does nothing if no changes.
+Runs hourly via cron. Commits any changes in the repo (memory files the bot writes, manual edits, etc.) with message `auto: snapshot YYYY-MM-DD`. Does nothing if no changes.
 
-**Schedule:** `0 * * * *` (root crontab, every hour on the hour)
+**Schedule:** `0 * * * *` (openclaw crontab — migrated from root 2026-04-11)
+**Lock:** `flock -n` on `/home/openclaw/lifeos/.repo.lock` so a future non-atomic writer can't race `git add -A`. Bot writes are append-only and already atomic via O_APPEND, so the lock is currently defensive only.
+**Failure:** Push errors now exit non-zero (previously echoed silently). Cron mail catches them.
 **Log:** `/home/openclaw/lifeos/auto-commit.log`
 
 ### 5. Fitbit Sync (`fitbit_sync.py` — external to this repo)
@@ -291,14 +295,21 @@ Any provider with an OpenAI-compatible chat completions API works with zero code
 - `SHEET_ID`, `DRIVE_UPLOADS_FOLDER` — Google resource IDs
 - `LIFEOS_DIR`, `GOG_PATH` — path overrides
 
-## Cron Jobs (root crontab)
+## Cron Jobs (openclaw crontab)
+
+Migrated from root → openclaw on 2026-04-11. Running as openclaw means scripts touch
+files as the same user that owns the repo, eliminating ownership drift to root.
 
 | Schedule | Script | Purpose |
 |----------|--------|---------|
-| `0 7 * * *` ET | `morning-brief.sh` | Daily Telegram morning brief |
-| `0 * * * *` | `auto-commit.sh` | Hourly git snapshot |
+| `0 7 * * *` ET | `morning-brief-ai.py` | Daily AI-generated Telegram morning brief |
+| `0 * * * *` | `auto-commit.sh` | Hourly git snapshot (with `.repo.lock` flock) |
 | `30 8 * * *` ET | `qa-check.sh` | Daily integrity check (alerts only on failure) |
 | `0 9 1 * *` ET | `monthly-audit.sh` | Monthly architecture audit report |
+
+**Not currently scheduled:** `review-soul-proposals.py` (architecture previously
+listed it as 8pm ET cron, but no entry exists in either crontab — possibly run
+manually). Decision pending: schedule it or document as manual.
 
 ## Service Management
 
@@ -361,22 +372,22 @@ Every conversation log entry includes a `tools` array showing exactly which tool
 | 8b | Save promises match tool calls | Bot hallucinated file saves | Catches hallucinations |
 | 8c | Status reports read 3+ tabs | Bot gave incomplete report | Catches lazy data pulls |
 | 20 | Tool result errors not surfaced | Bot said "saved" but tool returned Permission denied or ERROR | Catches silent failures |
-| 21 | Memory file permissions | memory.md not owned by openclaw — bot can't write | Catches permission drift |
+| 21 | File ownership drift | any tracked file (memory.md, soul.md, bot.py, architecture.md, etc.) not owned by openclaw — bot or cron can't write | Catches permission drift (expanded from memory-only on 2026-04-11) |
 | 22 | Said-vs-did (log/save claims vs tool calls) | Bot claimed to log/save but no matching tool call exists | Catches action hallucinations |
 | 23 | Exercise count mismatch | Bot discussed logging exercises but no log_workout calls found | Catches missed logging |
 | 24 | Stale soul proposals | >5 pending/awaiting proposals in soul-proposals.jsonl | Catches review pipeline failures |
 | 9a | Empty directories | Orphaned folders from old features | Orphan detection |
-| 9b | Old openclaw service enabled | Forgotten service still running | Orphan detection |
+| ~~9b~~ | ~~Old openclaw service enabled~~ | (removed 2026-04-11 — migration complete, never fired) | — |
 | 9c | Stale memory files (30d+) | Dead memory no one references | Orphan detection |
 | 10 | Expected files exist | Core file accidentally deleted | Architecture drift |
 | 11 | Git repo healthy | Repo broken or auto-commit failing | Backup integrity |
 | 12 | Morning brief delivered | Cron ran but AI/Telegram failed | Silent delivery failure |
 | 13 | Disk space (<85%) | Box filling up | Infrastructure health |
 | 14 | RAM usage (<85%) | OOM risk | Infrastructure health |
-| 15 | Fitbit data freshness (2d) | Timer runs but sync silently fails | Data pipeline health |
+| 15+18 | Fitbit + sleep freshness (2d) | (a) no Recovery rows = sync broken; (b) rows exist but sleep score blank = ring not worn. Single gog read serves both signals (merged 2026-04-11). | Data pipeline + completeness |
 | 16 | Google Sheets auth | gog token expired | Data pipeline health |
 | 17 | Caddy web server | Web endpoint down or unresponsive | Infrastructure health |
-| 18 | Sleep data freshness (2d) | Ring/watch not worn, stale recovery data | Data completeness |
+| ~~18~~ | (merged into 15+18 above on 2026-04-11) | — | — |
 | 19 | Git remote reachable | Pushes silently failing, no backup | Backup integrity |
 
 All hits are logged to `qa-hits.jsonl` for the monthly effectiveness audit.
@@ -393,7 +404,7 @@ All hits are logged to `qa-hits.jsonl` for the monthly effectiveness audit.
 ./resolve.sh "fitbit_sync_auth" "Fixed by running script directly instead of systemctl"
 ```
 
-Each entry has: issue key, what fixed it, and the date. If the same issue reappears after a fix (meaning the fix didn't hold or a new change broke it), date-specific keys (like `no_training_2026-04-06`) won't match old resolutions, so it alerts again.
+Each entry has: issue key, what fixed it, and the date. Match is **exact key only** (fixed 2026-04-11 — previous substring match meant resolving `no_training` silently auto-resolved every date-suffixed `no_training_2026-04-XX`). If the same issue reappears after a fix, date-specific keys won't match old resolutions, so it alerts again.
 
 **Why "tentative" resolution:** A fix might work today but break tomorrow if another change conflicts with it. The resolved file is a record of what was tried. If the QA flags the same pattern again, an AI can check the resolved file to see what was already attempted — avoiding chasing the same dead end twice.
 
@@ -511,6 +522,18 @@ The audit should be run by an AI (Claude Code or the bot) reading the actual dat
 
 Each entry explains what changed AND why — so future audits can assess whether the reason still applies.
 
+- **2026-04-11 (audit pass):** Architecture lean / consolidate sweep. **Why:** persistent bugs (ownership drift, false-positive QA alerts, said-vs-did hallucinations) felt like a structural problem. Audit identified split between architectural causes (fixable) and model-behavior causes (require model change, not patch). **Changes made:**
+    - **Cron migration:** all 4 cron jobs (morning-brief-ai.py, auto-commit.sh, qa-check.sh, monthly-audit.sh) moved from root → openclaw crontab. **Why:** every cron run as root was flipping file ownership; bot (as openclaw) then couldn't write. Moving cron to openclaw matches the bot's user and removes the entire ownership-drift class of bug at the source instead of patching after the fact.
+    - **resolved.jsonl substring bug fixed** (qa-check.sh `is_resolved`). **Why:** previous regex matched key prefixes, so resolving `no_training` silently auto-resolved every `no_training_2026-04-XX`. Now matches exact key only.
+    - **auto-commit.sh** now exits non-zero on push failure (previously echoed silently, masking from cron mail) and acquires `flock -n` on `.repo.lock` (defensive — bot writes are already atomic via O_APPEND).
+    - **morning-brief-ai.py** now exits non-zero on AI or Telegram failure with `Morning brief FAILED` message; qa-check.sh Check 12 catches it next morning. Telegram send raises on `ok:false` instead of swallowing.
+    - **morning-brief.sh deleted** — superseded by morning-brief-ai.py since 2026-04-08, no cron entry.
+    - **bot.py:** four `tool_log_*` functions now share one `_write_and_verify` helper (eliminated copy-paste verify/error-message logic).
+    - **qa-check.sh:** Check 9b (orphan_openclaw_service migration check) removed — never fired in qa-hits since 04-05. Check 21 (file ownership) expanded from memory.md only to cover bot.py, soul.md, architecture.md, etc. and dropped the procedures.md reference (file deleted 04-07). Checks 15+18 merged into one gog read (was two reads of the same Recovery tab).
+    - **All `(( VAR > 0 ))` integer comparisons** in qa-check.sh now use `VAR=$(cmd) || VAR=0` pattern. Previous `|| true` and `|| echo 0` patterns produced empty or doubled values that broke arithmetic.
+    - **Cruft deleted:** `__pycache__/`, `logs/2026-04-05.jsonl.bak`. `lifeos-bot.service` kept (verified identical to installed `/etc/systemd/system/lifeos-bot.service` — version-controlled copy).
+    - **Connections:** Cron user change is the structural fix that makes Check 21 mostly unnecessary going forward — it'll only fire if Claude Code (running as root from /root) edits a repo file directly, which is now the only remaining ownership-drift source.
+    - **Open decision (NOT done):** Model swap from GPT-4.1-mini back to a stronger model. Persistent `bf_wrong_source` and `said_not_did` hits spiked after 04-08 model downgrade. These are model-behavior bugs (rule is in soul.md, model ignores it) — no QA layer can prevent them, only catch them post-hoc. User to weigh cost vs correctness.
 - **2026-04-03:** OpenClaw (Node.js gateway + Docker sandbox + Grok 4.1 fast) deployed
 - **2026-04-05:** Replaced OpenClaw with single Python file (`bot.py`). **Why:** OpenClaw's sandbox had a `ModuleNotFoundError: No module named 'secrets'` bug preventing all file writes. Docker sandbox, container system, and gateway abstraction were unnecessary complexity for a single-user bot.
 - **2026-04-05:** Initially used Claude Sonnet ($12/mo), switched to Grok 4.1 Fast ($0.50/mo). **Why:** Grok's problems were caused by the broken sandbox, not the model itself. With direct file access, Grok 4.1 works well at 24x lower cost.
