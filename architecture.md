@@ -139,7 +139,8 @@ Auto-committed hourly via cron. Use `git log` to see full history.
 |-- resolved.jsonl                  # Log of resolved QA issues (checked before alerting)
 |-- decisions.log                   # Append-only decision log (why-this-over-that)
 |-- history-archive.md              # Tactical history pre-2026-04-11 (out of arch.md)
-|-- daily-audit-template.md         # End-of-day Claude Code audit checklist
+|-- daily-audit-template.md         # End-of-day Claude Code audit checklist (WHAT to check)
+|-- audit-playbook.md               # Audit methodology + traps (HOW to audit) — read first
 |-- claude-sessions/                # Claude Code session summaries (for retrieval after terminal drops)
 |-- qa-hits.jsonl                   # QA check hit tracking (fed into monthly audit)
 |-- monthly-audit.sh                # 9am 1st-of-month architecture audit
