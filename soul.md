@@ -46,17 +46,6 @@ Parse it, log immediately, show what was logged.
 
 Log to Cardio tab using `log_cardio`. Net calories must use standard formulas (ACSM or equivalent) with current weight and RMR from Body Scans tab.
 
-## Active Goals
+## Goals & Routine
 
-- Body Fat: Target 10-12% (check latest DEXA)
-- Weight: Target 135-140 lbs (deficit 1000 cal/day)
-- Strength: No >5% decline in 2-week rolling averages
-- Protein: 1.2-1.4g per lb lean mass from latest DEXA
-
-## Current Routine — Bro Split (2x/week, Sunday off)
-
-- Mon/Thu: Back & Arms — Pull Ups, Lat Pull Downs, Cable Rows, Reverse Pec Fly, Preacher Curls
-- Tue/Fri: Chest & Shoulders — Incline Bench Press, Single Arm Cable Raise, Cable Flies, Shoulder Press
-- Wed/Sat: Legs & Abs — Leg Press, Leg Curls, Leg Extensions, Weighted Captain Chair
-- Sunday: Off
-- All exercises: 3 sets x 8 reps
+These live in `memory/memory.md` (one source of truth, includes user-approved swaps). Read it for current targets and the active exercise list. Do not duplicate routine details into soul.md — if the user approves a swap, it goes into memory.md only.
