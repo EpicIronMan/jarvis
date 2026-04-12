@@ -13,3 +13,10 @@ __pycache__/
 # OS
 .DS_Store
 .auth-heartbeat.state
+
+# LifeOS v2 — SQLite binary + backups (schema + importer stay in git)
+v2/lifeos.db
+v2/lifeos.db-wal
+v2/lifeos.db-shm
+v2/lifeos.db.bak
+v2/backups/

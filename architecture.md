@@ -1,6 +1,14 @@
 # J.A.R.V.I.S. — Architecture Document
 
-Last updated: 2026-04-09
+Last updated: 2026-04-11
+
+> **v2 rebuild in progress** — as of 2026-04-11, a full architectural rewrite is
+> underway in `v2/`. The current system (bot.py + Google Sheets + gog + fitbit_sync)
+> described below is still **live and untouched**. v2 is additive and reversible.
+> Phase 0 (SQLite schema + importer) is complete. See `v2/README.md` for phase
+> status and `decisions.log` entry `2026-04-11 | SQLite + deterministic router rebuild`
+> for the full "why." This architecture doc continues to describe v1. When v2
+> overtakes v1 (Phase 2+), this doc will be rewritten.
 
 ## Maintenance Rule
 
