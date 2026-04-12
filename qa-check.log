@@ -8,3 +8,4 @@ QA alert sent: \n- Procedure: Bot discussed BF% but never read Body Scans tab\n-
 QA alert sent: \n- No conversation log for today (2026-04-09)\n- Cannot reach git remote — backup is not updating
 QA alert sent: \n- No conversation log for today (2026-04-10)\n- Cannot reach git remote — backup is not updating\n- memory.md owned by root (should be openclaw) — bot cannot write
 QA alert sent: \n- No training logged for yesterday (2026-04-10, Friday)\n- Procedure: Bot discussed BF% but never read Body Scans tab\n- Cannot reach git remote — backup is not updating\n- memory.md owned by root (should be openclaw) — bot cannot write\n- Bot claimed 1 log/save actions but made 0 tool calls
+QA alert sent: \n- No conversation log for today (2026-04-12)
