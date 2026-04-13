@@ -304,7 +304,7 @@ def _handle_crud(intent: Intent, conn) -> str:
         raw = f.get("date", "")
         d = dates.resolve_date(raw)
         if not d:
-            return f"Couldn't resolve date: '{raw}'"
+            return None  # let LLM handle unrecognized dates
         handlers = {
             "weight_for": lambda: query.weight_for_date(conn, d),
             "nutrition_for": lambda: query.nutrition_for_date(conn, d),
@@ -320,7 +320,7 @@ def _handle_crud(intent: Intent, conn) -> str:
         raw = f.get("range", "")
         r = dates.resolve_range(raw)
         if not r:
-            return f"Couldn't resolve range: '{raw}'"
+            return None  # let LLM handle unrecognized ranges
         start, end = r
         handlers = {
             "weight_range": lambda: query.weight_range(conn, start, end),
@@ -459,7 +459,8 @@ def _execute_tool(name: str, input_data: dict, conn) -> str:
         intent = Intent(name=input_data["intent"], fields={
             k: v for k, v in input_data.items() if k != "intent" and v
         })
-        return _handle_crud(intent, conn)
+        result = _handle_crud(intent, conn)
+        return result if result is not None else f"No data found for: {input_data}"
 
     if name == "log_workout":
         result = log_handlers.log_workout(conn, input_data["exercises"],
@@ -694,21 +695,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         intent = route(user_text)
         source = "router"
 
+        reply = None
         if intent:
             # CRUD — no LLM call needed
             reply = _handle_crud(intent, conn)
-            tools_used = []
-        else:
+            if reply is not None:
+                tools_used = []
+
+        if reply is None:
             # Step 2: Try LLM classifier
             try:
                 classified = classify(user_text)
                 if classified and classified.get("intent") != "unknown" and classified.get("confidence") != "low":
                     intent = Intent(name=classified["intent"], fields=classified.get("fields", {}))
                     reply = _handle_crud(intent, conn)
-                    tools_used = []
-                    source = "llm_classifier"
-                else:
-                    # Step 3: Full coaching conversation with Claude Sonnet
+                    if reply is not None:
+                        tools_used = []
+                        source = "llm_classifier"
+
+                if reply is None:
+                    # Step 3: Full coaching conversation
                     source = "llm_coaching"
                     cid = update.effective_chat.id
                     conv = conversations.get(cid)

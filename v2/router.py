@@ -47,8 +47,7 @@ _D = (
     r"|\d{4}-\d{2}-\d{2})"
 )
 
-# Range: "last 7 days", "past week", "this month", etc.
-_R = r"((?:last|past|this)\s+(?:\d+\s+days?|week|month))"
+# Range queries are handled by the LLM, not the router.
 
 # Optional leading fluff: "what is/was/are/were", "what's", "what did"
 _WH = r"(?:what(?:'?s|\s+(?:is|was|are|were|did))\s+)?"
@@ -79,18 +78,8 @@ _register(
     r"^\s*" + _WH + _MY + r"weight\s+" + _D + r"\s*\??\s*$",
     lambda m: {"date": m.group(1)},
 )
-# weight + range: "weight last 7 days", "weight this week"
-_register(
-    "weight_range",
-    r"^\s*" + _WH + _MY + r"weight\s+" + _R + r"\s*\??\s*$",
-    lambda m: {"range": m.group(1)},
-)
-# "weight trend" / "am I losing weight"
-_register(
-    "weight_range",
-    r"^\s*(?:" + _WH + _MY + r"weight\s+trend|am\s+i\s+(?:losing|gaining)\s+weight)\s*\??\s*$",
-    lambda m: {"range": "last 7 days"},
-)
+# weight + range: handled by LLM (natural language like "past few days")
+# "weight trend" / "am I losing weight": handled by LLM
 # "latest weight" / "current weight"
 _register(
     "weight_latest",
@@ -119,14 +108,7 @@ _register(
     r"^\s*(?:what\s+(?:did|have)\s+i\s+eat(?:en)?)\s+" + _D + r"\s*\??\s*$",
     lambda m: {"date": m.group(1)},
 )
-# nutrition + range: "nutrition last 7 days", "calories this week"
-_register(
-    "nutrition_range",
-    r"^\s*" + _WH + _MY
-    + r"(?:calories|cals|nutrition|protein|macros)\s+"
-    + _R + r"\s*\??\s*$",
-    lambda m: {"range": m.group(1)},
-)
+# nutrition + range: handled by LLM
 # bare "nutrition" / "calories" / "macros" / "protein" → today
 _register(
     "nutrition_for",
@@ -157,14 +139,7 @@ _register(
     r"^\s*(?:what\s+did\s+i\s+(?:train|lift|do))\s+" + _D + r"\s*\??\s*$",
     lambda m: {"date": m.group(1)},
 )
-# training + range
-_register(
-    "training_range",
-    r"^\s*" + _WH + _MY
-    + r"(?:training|workouts?|lift(?:ing|s)?|sessions?)\s+"
-    + _R + r"\s*\??\s*$",
-    lambda m: {"range": m.group(1)},
-)
+# training + range: handled by LLM
 # "last workout" / "latest session" / "previous training"
 _register(
     "training_latest",
@@ -203,14 +178,7 @@ _register(
     r"^\s*(?:how\s+many\s+)?steps\s*\??\s*$",
     lambda m: {"date": "today"},
 )
-# recovery + range
-_register(
-    "recovery_range",
-    r"^\s*" + _WH + _MY
-    + r"(?:sleep|recovery|steps)\s+"
-    + _R + r"\s*\??\s*$",
-    lambda m: {"range": m.group(1)},
-)
+# recovery + range: handled by LLM
 # bare "sleep" / "recovery" → yesterday for sleep, today for recovery
 _register(
     "recovery_for",
