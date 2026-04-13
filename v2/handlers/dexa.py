@@ -59,7 +59,7 @@ def extract_dexa_from_pdf(pdf_path: str | Path, conn: sqlite3.Connection, date_s
         })
 
     resp = client.messages.create(
-        model="claude-sonnet-4-5-20241022",
+        model="claude-sonnet-4-6",
         max_tokens=500,
         messages=[{"role": "user", "content": content}],
     )

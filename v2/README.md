@@ -1,16 +1,8 @@
-# LifeOS v2 — Staging area for the SQLite + deterministic-router rebuild
+# LifeOS v2 — SQLite + deterministic-router rebuild (LIVE)
 
-This directory holds the in-progress v2 rewrite. **The running system at
-`/home/openclaw/lifeos/` (bot.py, morning-brief-ai.py, qa-check.sh, Google
-Sheets as source of truth) is untouched** — v2 is additive.
-
-See `decisions.log` entry `2026-04-11 | SQLite + deterministic router rebuild`
-for the full rationale. Short version: every "fix" since 2026-04-08 has been
-a patch for model-behavior failures (hallucinations, said_not_did,
-said_failed_not_tried, bf_wrong_source, wrong-date answers, avoidance pivots).
-Root cause: we placed a probabilistic component in charge of deterministic
-CRUD work. v2 inverts that — scripts do CRUD and date math and retries; the
-model writes coaching prose, parses DEXA scans, and handles on-demand analysis.
+**v2 is now the running system.** bot.py routes through v2 for all CRUD.
+Claude Sonnet handles coaching/analysis. SQLite is source of truth.
+Google Sheets is a one-way read-only mirror.
 
 ## Phase status
 
@@ -18,13 +10,12 @@ model writes coaching prose, parses DEXA scans, and handles on-demand analysis.
 |-------|------|--------|
 | 0 | SQLite schema + one-shot sheet importer + verified row parity | **done 2026-04-11** |
 | 1 | Deterministic router + query handlers + read-path CLI | **done 2026-04-11** |
-| 1.5 | Expand coverage + LLM fallback + bug fixes + tests | **done 2026-04-12** |
-| 2 | Write path on SQLite + one-way DB→read-only-sheet export | pending |
-| 3 | Cleanup (delete gog, .openclaw, auth-heartbeat, vendored/) + Claude Sonnet model swap | pending |
-| 4 | Trim qa-check.sh + harden based on real v2 event log | pending |
+| 1.5 | Expand coverage + LLM fallback + bug fixes + 124 tests | **done 2026-04-12** |
+| 2 | Write path + bot.py cutover + fitbit ingest + sheet export + morning brief | **done 2026-04-12** |
+| 3 | Sonnet swap + cleanup + qa-check rewrite + soul.md + architecture.md | **done 2026-04-12** |
+| 4 | Proactive coaching triggers (no-training-2d, protein, weight direction) | **done 2026-04-12** |
 
-v2 is fully reversible until Phase 2 begins. `rm -rf v2/` undoes everything
-through Phase 1.
+Rollback: `cp bot.py.v1.backup bot.py && systemctl restart lifeos-bot`
 
 ## Files
 

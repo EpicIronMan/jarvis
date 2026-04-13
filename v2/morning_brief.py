@@ -160,7 +160,7 @@ def _generate_brief(context: dict) -> str:
         system += f"\n\nMention that there are {context['pending_proposals']} pending soul proposals awaiting review."
 
     resp = client.messages.create(
-        model="claude-sonnet-4-5-20241022",
+        model="claude-sonnet-4-6",
         max_tokens=500,
         system=system,
         messages=[{"role": "user", "content": json.dumps(context, default=str)}],

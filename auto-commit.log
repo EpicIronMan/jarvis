@@ -577,3 +577,25 @@ Committed and pushed.
 To github.com:EpicIronMan/jarvis.git
    0d878ca..6b3af2a  master -> master
 Committed and pushed.
+[master 159ae19] auto: snapshot 2026-04-12
+ 26 files changed, 4422 insertions(+), 2380 deletions(-)
+ delete mode 100644 auth-heartbeat.log
+ delete mode 100755 auth-heartbeat.sh
+ create mode 100644 bot.py.v1.backup
+ create mode 100644 claude-sessions/2026-04-12-v2-phase-1.5.md
+ create mode 100755 v2/backup.sh
+ create mode 100644 v2/export_to_sheet.py
+ create mode 100644 v2/handlers/dexa.py
+ create mode 100644 v2/handlers/log.py
+ create mode 100644 v2/ingest_fitbit.py
+ create mode 100644 v2/lifeos.sql
+ create mode 100644 v2/morning_brief.py
+ create mode 100644 v2/tests/__init__.py
+ create mode 100644 v2/tests/conftest.py
+ create mode 100644 v2/tests/test_dates.py
+ create mode 100644 v2/tests/test_query.py
+ create mode 100644 v2/tests/test_router.py
+ delete mode 100755 vendored/fitbit_sync.py
+To github.com:EpicIronMan/jarvis.git
+   6b3af2a..159ae19  master -> master
+Committed and pushed.

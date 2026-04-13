@@ -45,8 +45,9 @@ INSERT INTO body_metrics VALUES('2026-04-06',174.199999999999988,79.0,21.5,NULL,
 INSERT INTO body_metrics VALUES('2026-04-07',173.300000000000011,78.5999999999999943,21.3000000000000007,NULL,NULL,26.5700000000000002,'FITBIT','synced 17:34 ET');
 INSERT INTO body_metrics VALUES('2026-04-08',173.099999999999994,78.5,21.1999999999999992,NULL,NULL,26.5300000000000011,'FITBIT','synced 23:53 ET');
 INSERT INTO body_metrics VALUES('2026-04-09',172.800000000000011,78.4000000000000056,21.1999999999999992,NULL,NULL,26.5199999999999995,'FITBIT','synced 19:13 ET');
-INSERT INTO body_metrics VALUES('2026-04-10',172.0,78.0,21.0,NULL,NULL,26.3700000000000009,'FITBIT','synced 16:00 ET');
+INSERT INTO body_metrics VALUES('2026-04-10',172.5,78.2000000000000028,21.0,NULL,NULL,26.3700000000000009,'FITBIT','synced 19:13 ET');
 INSERT INTO body_metrics VALUES('2026-04-11',172.0,78.0,21.0,NULL,NULL,26.379999999999999,'FITBIT','synced 16:00 ET');
+INSERT INTO body_metrics VALUES('2026-04-12',173.699999999999988,78.7999999999999971,21.3999999999999985,NULL,NULL,26.7899999999999991,'FITBIT','synced 21:49 ET');
 CREATE TABLE body_scan (
     date                        TEXT    PRIMARY KEY,  -- YYYY-MM-DD
     scan_type                   TEXT    NOT NULL,     -- DEXA | InBody | other
@@ -112,6 +113,7 @@ INSERT INTO nutrition VALUES('2026-04-08',2435.0,160.0,124.0,148.0,20.0,1821.0,'
 INSERT INTO nutrition VALUES('2026-04-09',1490.0,105.0,147.0,53.0,8.0,1173.0,'FITBIT','synced 19:13 ET');
 INSERT INTO nutrition VALUES('2026-04-10',582.0,33.0,23.0,44.0,3.0,0.0,'FITBIT','synced 16:00 ET');
 INSERT INTO nutrition VALUES('2026-04-11',1359.0,35.0,186.0,49.0,11.0,1160.0,'FITBIT','synced 12:14 ET');
+INSERT INTO nutrition VALUES('2026-04-12',602.0,29.0,77.0,20.0,6.0,315.0,'FITBIT','synced 21:49 ET');
 CREATE TABLE workout (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     date          TEXT    NOT NULL,
@@ -145,7 +147,7 @@ INSERT INTO workout VALUES(17,'2026-04-08','Leg Press',3,8,320.0,NULL,7680.0,'BR
 INSERT INTO workout VALUES(18,'2026-04-08','Leg Curl',3,10,100.0,NULL,3000.0,'BRO_SPLIT','TELEGRAM',NULL);
 INSERT INTO workout VALUES(19,'2026-04-08','Leg Extension',3,10,140.0,NULL,4200.0,'BRO_SPLIT','TELEGRAM',NULL);
 INSERT INTO workout VALUES(20,'2026-04-08','Weighted Captain Chair',3,10,8.0,NULL,240.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(21,'2026-04-09','Pull Up',7,1,172.800000000000011,NULL,1209.5999999999999,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(21,'2026-04-09','Pull Ups',7,1,172.800000000000011,NULL,1209.5999999999999,'BRO_SPLIT','TELEGRAM',NULL);
 INSERT INTO workout VALUES(22,'2026-04-09','Lat Pulldown',3,8,160.0,NULL,3840.0,'BRO_SPLIT','TELEGRAM',NULL);
 INSERT INTO workout VALUES(23,'2026-04-09','Seated Row Machine',3,10,85.0,NULL,2550.0,'BRO_SPLIT','TELEGRAM',NULL);
 INSERT INTO workout VALUES(24,'2026-04-09','Reverse Pec Fly',3,8,100.0,NULL,2400.0,'BRO_SPLIT','TELEGRAM',NULL);
@@ -219,6 +221,7 @@ INSERT INTO recovery VALUES('2026-04-08',93.0,4.90000000000000035,3834,18,NULL,6
 INSERT INTO recovery VALUES('2026-04-09',92.0,6.5,4711,55,NULL,60,89.0,7.09999999999999964,'FITBIT','deep:82m light:225m rem:84m wake:33m synced 19:13 ET');
 INSERT INTO recovery VALUES('2026-04-10',NULL,NULL,4555,41,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
 INSERT INTO recovery VALUES('2026-04-11',95.0,5.29999999999999982,NULL,NULL,NULL,NULL,82.0,5.59999999999999964,'FITBIT','deep:82m light:157m rem:80m wake:16m synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-12',92.0,4.90000000000000035,3845,46,NULL,64,79.0,5.29999999999999982,'FITBIT','synced 21:49 ET');
 CREATE TABLE routine (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     effective_from  TEXT    NOT NULL,                    -- YYYY-MM-DD
@@ -245,9 +248,20 @@ CREATE TABLE events (
     payload_json TEXT    NOT NULL,                       -- free-form per kind
     user_msg_id  TEXT                                    -- Telegram msg id, nullable
 ) STRICT;
+INSERT INTO events VALUES(1,'2026-04-12T21:20:39.955343-04:00','handler_call','{"handler": "log_workout", "date": "2026-04-12", "n_exercises": 1, "total_volume": 4125.0, "session_type": "BRO_SPLIT"}',NULL);
+INSERT INTO events VALUES(2,'2026-04-12T21:20:40.267985-04:00','handler_call','{"handler": "log_workout", "date": "2026-04-12", "n_exercises": 1, "total_volume": 4725.0, "session_type": "BRO_SPLIT"}',NULL);
+INSERT INTO events VALUES(3,'2026-04-12T21:20:40.496360-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-12", "weight_lbs": 172.5, "source": "TELEGRAM"}',NULL);
+INSERT INTO events VALUES(4,'2026-04-12T21:20:40.711521-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-12", "weight_lbs": 170.0, "source": "RENPHO"}',NULL);
+INSERT INTO events VALUES(5,'2026-04-12T21:20:41.022347-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-12", "calories": 2100.0, "protein_g": 170.0}',NULL);
+INSERT INTO events VALUES(6,'2026-04-12T21:20:41.352412-04:00','handler_call','{"handler": "rename_exercise", "old_name": "Pull Up", "new_name": "Pull Ups", "rows_updated": 1}',NULL);
+INSERT INTO events VALUES(7,'2026-04-12T21:20:41.612958-04:00','handler_call','{"handler": "edit_weight", "date": "2026-04-10", "weight_lbs": 171.5}',NULL);
+INSERT INTO events VALUES(8,'2026-04-12T21:49:10.567150-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-12", "weight_lbs": 173.7, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(9,'2026-04-12T21:49:12.758181-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-12", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(10,'2026-04-12T21:49:13.503667-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-12", "calories": 602.0, "protein_g": 29.0}',NULL);
 DELETE FROM sqlite_sequence;
-INSERT INTO sqlite_sequence VALUES('workout',28);
+INSERT INTO sqlite_sequence VALUES('workout',30);
 INSERT INTO sqlite_sequence VALUES('cardio',3);
+INSERT INTO sqlite_sequence VALUES('events',10);
 CREATE INDEX idx_workout_date       ON workout(date);
 CREATE INDEX idx_workout_exercise   ON workout(exercise);
 CREATE INDEX idx_workout_date_ex    ON workout(date, exercise);

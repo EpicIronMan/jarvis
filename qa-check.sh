@@ -163,7 +163,7 @@ if [ "$HOUR" -ge 9 ]; then
 fi
 
 # ============================================================
-# 15. Git repo health
+# 15. Git repo health (lock + uncommitted changes)
 # ============================================================
 cd "$LIFEOS_DIR"
 if [ -f .git/index.lock ]; then
@@ -172,6 +172,102 @@ if [ -f .git/index.lock ]; then
         flag "git_lock" "git index.lock still present after 5s wait"
     fi
 fi
+UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l)
+if [ "$UNCOMMITTED" -gt 20 ]; then
+    flag "git_uncommitted" "$UNCOMMITTED uncommitted changes (auto-commit may be failing)"
+fi
+
+# ============================================================
+# 16. RAM usage
+# ============================================================
+MEM_PCT=$(free | awk '/^Mem:/ {printf "%.0f", $3/$2*100}')
+if [ "$MEM_PCT" -gt 85 ]; then
+    flag "ram_high" "RAM usage at ${MEM_PCT}% (threshold 85%)"
+fi
+
+# ============================================================
+# 17. Tool verification failures in today's log
+# ============================================================
+if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
+    TOOL_FAILS=$(grep -c '"FAILED\|"ERROR\|"error' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null || echo 0)
+    if [ "$TOOL_FAILS" -gt 0 ]; then
+        flag "tool_failures_$TODAY" "$TOOL_FAILS tool error(s) in today's conversation log"
+    fi
+fi
+
+# ============================================================
+# 18. Silent tool errors (errors in log but no user-facing mention)
+# ============================================================
+if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
+    # Count tool errors vs error mentions in assistant replies
+    TOOL_ERRORS=$(grep -o '"result":[^}]*\(ERROR\|FAILED\|error\|failed\)' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || echo 0)
+    ERROR_MENTIONS=$(grep -o '"assistant":[^}]*\(error\|fail\|could not\|unable\)' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null | wc -l || echo 0)
+    if [ "$TOOL_ERRORS" -gt 0 ] && [ "$ERROR_MENTIONS" = "0" ]; then
+        flag "silent_tool_errors_$TODAY" "$TOOL_ERRORS tool errors today but none surfaced to user"
+    fi
+fi
+
+# ============================================================
+# 19. Stale memory files (>30d, not referenced in recent logs)
+# ============================================================
+MEMORY_DIR="$LIFEOS_DIR/memory"
+if [ -d "$MEMORY_DIR" ]; then
+    find "$MEMORY_DIR" -name "*.md" -mtime +30 -type f 2>/dev/null | while read -r mf; do
+        fname=$(basename "$mf")
+        # Check if any log in last 7 days references this file
+        RECENT_REF=$(grep -rl "$fname" "$LOG_DIR"/ 2>/dev/null | head -1)
+        if [ -z "$RECENT_REF" ]; then
+            flag "stale_memory_$fname" "memory/$fname not modified in 30+ days and not referenced in recent logs"
+        fi
+    done
+fi
+
+# ============================================================
+# 20. Caddy web server health
+# ============================================================
+if systemctl is-active --quiet caddy 2>/dev/null; then
+    CADDY_RESP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost/ 2>/dev/null || echo "000")
+    if [ "$CADDY_RESP" = "000" ]; then
+        flag "caddy_no_response" "Caddy running but not responding on localhost"
+    fi
+elif systemctl list-unit-files caddy.service >/dev/null 2>&1; then
+    flag "caddy_down" "Caddy service is not running"
+fi
+
+# ============================================================
+# 21. Git remote reachable + up to date
+# ============================================================
+if git remote get-url origin >/dev/null 2>&1; then
+    if ! git ls-remote --exit-code origin HEAD >/dev/null 2>&1; then
+        flag "git_remote_unreachable" "Cannot reach git remote — backup is not updating"
+    else
+        LOCAL_SHA=$(git rev-parse HEAD 2>/dev/null)
+        REMOTE_SHA=$(git ls-remote origin HEAD 2>/dev/null | awk '{print $1}')
+        if [ -n "$LOCAL_SHA" ] && [ -n "$REMOTE_SHA" ] && [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
+            flag "git_remote_behind" "Git remote differs from local HEAD — pushes may be failing"
+        fi
+    fi
+fi
+
+# ============================================================
+# 22. Stale soul proposals (>5 pending)
+# ============================================================
+PROPOSALS="$LIFEOS_DIR/soul-proposals.jsonl"
+if [ -f "$PROPOSALS" ]; then
+    PENDING=$(grep -c '"status": "pending"' "$PROPOSALS" 2>/dev/null || echo 0)
+    if [ "$PENDING" -gt 5 ]; then
+        flag "stale_soul_proposals" "$PENDING pending soul proposals — review may not be running"
+    fi
+fi
+
+# ============================================================
+# 23. Architecture drift (missing expected files)
+# ============================================================
+for f in bot.py soul.md architecture.md auto-commit.sh qa-check.sh v2/schema.sql v2/router.py v2/lifeos_cli.py; do
+    if [ ! -f "$LIFEOS_DIR/$f" ]; then
+        flag "missing_file_$f" "Missing expected file: $f"
+    fi
+done
 
 # ============================================================
 # Send alert if any unresolved flags

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""LifeOS Bot v2 — deterministic CRUD + Claude Sonnet coaching via Telegram.
+"""LifeOS Bot v2 — deterministic CRUD + Grok coaching via Telegram.
 
 Architecture (v2):
   - CRUD (weight, nutrition, training, recovery, cardio, stats): deterministic
     Python router → SQLite handlers. No LLM involved in data operations.
-  - Coaching, analysis, ambiguous queries: Claude Sonnet via Anthropic SDK.
+  - Coaching, analysis, ambiguous queries: Grok via xAI (OpenAI-compatible SDK).
   - DEXA PDF parsing: Claude vision (narrow scope, extracts numbers only).
-  - All data lives in v2/lifeos.db (SQLite). Sheets is a one-way read-only mirror.
+  - All data lives in v2/lifeos.db (SQLite).
 
 See architecture.md and v2/README.md for the full system map.
 """
@@ -31,7 +31,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-import anthropic
+from openai import OpenAI
 from zoneinfo import ZoneInfo
 
 # --- Config ---
@@ -63,11 +63,11 @@ logging.basicConfig(
 )
 lg = logging.getLogger("lifeos")
 
-# --- Anthropic client ---
-_anthropic_client = anthropic.Anthropic(
-    api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
-)
-MODEL = "claude-sonnet-4-5-20241022"
+# --- xAI / Grok client (OpenAI-compatible) ---
+AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("XAI_API_KEY", "")
+AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.x.ai/v1")
+MODEL = os.environ.get("AI_MODEL", "grok-4-1-fast")
+_client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
 
 
 # --- System prompt ---
@@ -373,130 +373,56 @@ def _do_fitbit_sync() -> str:
         return "Fitbit sync timed out after 60s."
 
 
-# --- LLM tools (for coaching/analysis mode) ---
+# --- LLM tools (OpenAI format for xAI/Grok) ---
+
+def _tool(name, desc, params):
+    return {"type": "function", "function": {"name": name, "description": desc, "parameters": params}}
 
 TOOLS = [
-    {
-        "name": "save_memory",
-        "description": "Save a user decision, preference, or goal to memory.md.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "entry": {"type": "string", "description": "What to remember"},
-            },
-            "required": ["entry"],
-        },
-    },
-    {
-        "name": "propose_soul_change",
-        "description": "Propose a change to soul.md behavioral rules for Claude Code to review.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "proposed_text": {"type": "string"},
-                "section": {"type": "string"},
-                "reasoning": {"type": "string"},
-                "source_message": {"type": "string"},
-            },
-            "required": ["proposed_text", "section", "reasoning", "source_message"],
-        },
-    },
-    {
-        "name": "read_memory",
-        "description": "Read the user's saved memories and goals.",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "query_data",
-        "description": (
-            "Query fitness data from SQLite. Use this when you need data to answer a coaching question. "
-            "Available queries: stats, weight_latest, weight_for, weight_range, nutrition_for, "
-            "nutrition_range, training_for, training_latest, training_range, recovery_for, "
-            "recovery_range, body_scan_latest, cardio_latest, last_exercise."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "intent": {"type": "string", "description": "Query intent name"},
-                "date": {"type": "string", "description": "Date token (today, yesterday, 2026-04-10, etc.)"},
-                "range": {"type": "string", "description": "Range token (last 7 days, this week, etc.)"},
-                "exercise": {"type": "string", "description": "Exercise name for last_exercise queries"},
-            },
-            "required": ["intent"],
-        },
-    },
-    {
-        "name": "log_workout",
-        "description": "Log workout exercises to SQLite.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "exercises": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "sets": {"type": "integer"},
-                            "reps": {"type": "integer"},
-                            "weight_lbs": {"type": "number"},
-                            "rpe": {"type": "number"},
-                        },
-                        "required": ["name", "sets", "reps", "weight_lbs"],
-                    },
-                },
-                "session_type": {"type": "string"},
-            },
-            "required": ["exercises"],
-        },
-    },
-    {
-        "name": "log_weight",
-        "description": "Log a body weight entry to SQLite.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "weight_lbs": {"type": "number"},
-                "source": {"type": "string"},
-                "notes": {"type": "string"},
-            },
-            "required": ["weight_lbs"],
-        },
-    },
-    {
-        "name": "log_nutrition",
-        "description": "Log daily nutrition to SQLite.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "calories": {"type": "number"},
-                "protein_g": {"type": "number"},
-                "carbs_g": {"type": "number"},
-                "fat_g": {"type": "number"},
-            },
-            "required": ["calories", "protein_g"],
-        },
-    },
-    {
-        "name": "log_cardio",
-        "description": "Log a cardio session to SQLite.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "exercise": {"type": "string"},
-                "duration_min": {"type": "number"},
-                "net_calories": {"type": "number"},
-                "met_used": {"type": "number"},
-                "notes": {"type": "string"},
-            },
-            "required": ["exercise", "duration_min", "net_calories"],
-        },
-    },
-    {
-        "name": "sync_fitbit",
-        "description": "Trigger an immediate Fitbit data sync to SQLite.",
-        "input_schema": {"type": "object", "properties": {}},
-    },
+    _tool("save_memory", "Save a user decision, preference, or goal to memory.md.",
+          {"type": "object", "properties": {"entry": {"type": "string"}}, "required": ["entry"]}),
+    _tool("propose_soul_change", "Propose a change to soul.md behavioral rules for Claude Code to review.",
+          {"type": "object", "properties": {
+              "proposed_text": {"type": "string"}, "section": {"type": "string"},
+              "reasoning": {"type": "string"}, "source_message": {"type": "string"},
+          }, "required": ["proposed_text", "section", "reasoning", "source_message"]}),
+    _tool("read_memory", "Read the user's saved memories and goals.",
+          {"type": "object", "properties": {}}),
+    _tool("query_data",
+          "Query fitness data from SQLite. Available: stats, weight_latest, weight_for, weight_range, "
+          "nutrition_for, nutrition_range, training_for, training_latest, training_range, recovery_for, "
+          "recovery_range, body_scan_latest, cardio_latest, last_exercise.",
+          {"type": "object", "properties": {
+              "intent": {"type": "string", "description": "Query intent name"},
+              "date": {"type": "string", "description": "Date token"},
+              "range": {"type": "string", "description": "Range token"},
+              "exercise": {"type": "string", "description": "Exercise name"},
+          }, "required": ["intent"]}),
+    _tool("log_workout", "Log workout exercises to SQLite.",
+          {"type": "object", "properties": {
+              "exercises": {"type": "array", "items": {"type": "object", "properties": {
+                  "name": {"type": "string"}, "sets": {"type": "integer"},
+                  "reps": {"type": "integer"}, "weight_lbs": {"type": "number"},
+                  "rpe": {"type": "number"},
+              }, "required": ["name", "sets", "reps", "weight_lbs"]}},
+              "session_type": {"type": "string"},
+          }, "required": ["exercises"]}),
+    _tool("log_weight", "Log a body weight entry to SQLite.",
+          {"type": "object", "properties": {
+              "weight_lbs": {"type": "number"}, "source": {"type": "string"}, "notes": {"type": "string"},
+          }, "required": ["weight_lbs"]}),
+    _tool("log_nutrition", "Log daily nutrition to SQLite.",
+          {"type": "object", "properties": {
+              "calories": {"type": "number"}, "protein_g": {"type": "number"},
+              "carbs_g": {"type": "number"}, "fat_g": {"type": "number"},
+          }, "required": ["calories", "protein_g"]}),
+    _tool("log_cardio", "Log a cardio session to SQLite.",
+          {"type": "object", "properties": {
+              "exercise": {"type": "string"}, "duration_min": {"type": "number"},
+              "net_calories": {"type": "number"}, "met_used": {"type": "number"}, "notes": {"type": "string"},
+          }, "required": ["exercise", "duration_min", "net_calories"]}),
+    _tool("sync_fitbit", "Trigger an immediate Fitbit data sync to SQLite.",
+          {"type": "object", "properties": {}}),
 ]
 
 
@@ -567,8 +493,14 @@ def _execute_tool(name: str, input_data: dict, conn) -> str:
 
 # --- AI conversation (Anthropic SDK) ---
 
-def ask_ai(user_content: str | list, conversation: list[dict], conn) -> tuple[str, list]:
-    """Send to Claude Sonnet for coaching/analysis. Handles tool calls."""
+def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, list]:
+    """Send to Grok for coaching/analysis. Handles tool calls.
+
+    Creates its own SQLite connection because this runs in a worker thread
+    via asyncio.to_thread — SQLite connections can't cross threads.
+    """
+    import time as _time
+    conn = query.connect(DB_PATH)
     conversation.append({"role": "user", "content": user_content})
     tool_log = []
     system_prompt = _build_system_prompt()
@@ -582,48 +514,48 @@ def ask_ai(user_content: str | list, conversation: list[dict], conn) -> tuple[st
 
     for _ in range(10):  # max tool rounds
         try:
-            response = _anthropic_client.messages.create(
+            response = _client.chat.completions.create(
                 model=MODEL,
                 max_tokens=4096,
-                system=system_prompt + stats_context,
-                messages=conversation,
+                messages=[{"role": "system", "content": system_prompt + stats_context}] + conversation,
                 tools=TOOLS,
             )
-        except anthropic.RateLimitError:
-            return "API rate limited. Try again in a minute.", tool_log
-        except anthropic.APIError as e:
+        except Exception as e:
+            if "429" in str(e):
+                conn.close()
+                return "API rate limited. Try again in a minute.", tool_log
+            conn.close()
             return f"API error: {e}", tool_log
 
-        # Process response
-        text_parts = []
-        tool_uses = []
-        for block in response.content:
-            if block.type == "text":
-                text_parts.append(block.text)
-            elif block.type == "tool_use":
-                tool_uses.append(block)
+        msg = response.choices[0].message
+        assistant_msg = {"role": "assistant", "content": msg.content or ""}
+        if msg.tool_calls:
+            assistant_msg["tool_calls"] = [
+                {"id": tc.id, "type": "function",
+                 "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                for tc in msg.tool_calls
+            ]
+        conversation.append(assistant_msg)
 
-        # Add assistant message to conversation
-        conversation.append({"role": "assistant", "content": response.content})
-
-        if not tool_uses:
-            return "\n".join(text_parts) or "I'm not sure how to help with that.", tool_log
+        if not msg.tool_calls:
+            conn.close()
+            return msg.content or "I'm not sure how to help with that.", tool_log
 
         # Execute tools and add results
-        tool_results = []
-        for tu in tool_uses:
-            lg.info("Tool call: %s(%s)", tu.name, json.dumps(tu.input)[:200])
-            result = _execute_tool(tu.name, tu.input, conn)
+        for tc in msg.tool_calls:
+            fn_name = tc.function.name
+            fn_args = json.loads(tc.function.arguments)
+            lg.info("Tool call: %s(%s)", fn_name, json.dumps(fn_args)[:200])
+            result = _execute_tool(fn_name, fn_args, conn)
             lg.info("Tool result: %s", result[:200])
-            tool_log.append({"tool": tu.name, "input": tu.input, "result": result[:500]})
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": tu.id,
+            tool_log.append({"tool": fn_name, "input": fn_args, "result": result[:500]})
+            conversation.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
                 "content": result,
             })
 
-        conversation.append({"role": "user", "content": tool_results})
-
+    conn.close()
     return "Hit the tool call limit. Try a simpler request.", tool_log
 
 
@@ -694,6 +626,42 @@ def load_conversation_from_logs() -> list[dict]:
     return conv
 
 
+# --- Monitoring (passive — flags issues, never intervenes) ---
+
+WRITE_TOOLS = {"log_workout", "log_weight", "log_nutrition", "log_cardio",
+               "save_memory", "propose_soul_change", "query_data", "sync_fitbit"}
+
+
+def _append_failure_notice(reply: str, tools_used: list[dict]) -> str:
+    """If any tool failed and the bot didn't mention it, append a notice."""
+    failed = [t for t in tools_used
+              if any(kw in t.get("result", "") for kw in ("FAILED", "ERROR", "error", "failed"))]
+    if not failed:
+        return reply
+    failure_keywords = ("fail", "error", "could not", "unable", "didn't work")
+    if not any(kw in reply.lower() for kw in failure_keywords):
+        notice = "\n\n" + " | ".join(f"{t['tool']} failed" for t in failed) + " — action(s) did NOT complete."
+        return reply + notice
+    return reply
+
+
+def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> str:
+    """If the bot claims it wrote data but made no write tool calls, append warning."""
+    action_phrases = (
+        r"i(?:'ve| have) (?:just |now )?(?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added)",
+        r"let me (?:correct|fix|update|delete|remove|clear|log|save|add)",
+        r"i (?:will|shall) (?:now )?(?:correct|fix|update|delete|remove|clear|log|save|add)",
+    )
+    reply_lower = reply.lower()
+    claimed = any(re.search(p, reply_lower) for p in action_phrases)
+    if not claimed:
+        return reply
+    used_write_tool = any(t.get("tool") in WRITE_TOOLS for t in tools_used)
+    if used_write_tool:
+        return reply
+    return reply + "\n\n_I claimed to make changes but didn't call a write tool. The data was NOT changed. Tell me to actually do it._"
+
+
 # --- Response formatting ---
 
 def _clean_content(reply: str) -> str:
@@ -749,7 +717,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         conversations[cid] = conv
                     if len(conv) > MAX_CONVERSATION_MESSAGES:
                         conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
-                    reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv, conn)
+                    reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
             except Exception as e:
                 lg.exception("Classification/coaching error")
                 reply = f"Something went wrong: {e}"
@@ -759,6 +727,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
 
     reply = _clean_content(reply)
+    # Apply monitors (only relevant for coaching mode with tool calls)
+    if tools_used:
+        reply = _append_failure_notice(reply, tools_used)
+        reply = _append_write_hallucination_notice(reply, tools_used)
     reply = AGENT_EMOJI + "\n" + reply
 
     log_conversation(user_text, reply, tools_used if tools_used else None)
@@ -794,7 +766,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lg.info("Downloaded: %s", local_path)
 
     caption = update.message.caption or ""
-    conn = query.connect(DB_PATH)
 
     try:
         if filename.lower().endswith(".pdf"):
@@ -802,10 +773,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_dexa = "dexa" in filename.lower() or "dexa" in caption.lower()
             if is_dexa:
                 from handlers.dexa import extract_dexa_from_pdf
+                conn = query.connect(DB_PATH)
                 # Extract date from filename or use today
                 date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
                 scan_date = date_match.group(1) if date_match else _today()
                 result = extract_dexa_from_pdf(str(local_path), conn, scan_date)
+                conn.close()
                 if "error" in result:
                     reply = f"DEXA extraction failed: {result['error']}"
                 else:
@@ -820,19 +793,21 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                     for b64 in b64_images:
                         content.append({
-                            "type": "image",
-                            "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
                         })
                     conv = conversations.setdefault(CHAT_ID, [])
-                    reply, tools_used = await asyncio.to_thread(ask_ai, content, conv, conn)
+                    reply, tools_used = await asyncio.to_thread(ask_ai, content, conv)
                 except Exception as e:
                     reply = f"PDF processing failed: {e}"
                     tools_used = []
         else:
             reply = f"File saved: {filename}"
             tools_used = []
-    finally:
-        conn.close()
+    except Exception as e:
+        lg.exception("Document handler error")
+        reply = f"Something went wrong: {e}"
+        tools_used = []
 
     reply = _clean_content(reply)
     reply = AGENT_EMOJI + "\n" + reply
@@ -862,15 +837,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     content = [
         {"type": "text", "text": f"[Photo uploaded: {filename}] {caption}".strip()},
-        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
     ]
 
-    conn = query.connect(DB_PATH)
+    conv = conversations.setdefault(CHAT_ID, [])
     try:
-        conv = conversations.setdefault(CHAT_ID, [])
-        reply, tools_used = await asyncio.to_thread(ask_ai, content, conv, conn)
-    finally:
-        conn.close()
+        reply, tools_used = await asyncio.to_thread(ask_ai, content, conv)
+    except Exception as e:
+        reply = f"Something went wrong: {e}"
+        tools_used = []
 
     reply = _clean_content(reply)
     reply = AGENT_EMOJI + "\n" + reply
