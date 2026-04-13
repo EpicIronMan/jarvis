@@ -12,7 +12,8 @@ If you're running an audit, **read this first**, then the daily template.
 2. `qa-hits.jsonl` (last 14 days) — what's recurring? what's been "fixed" but came back?
 3. `soul-proposals.jsonl` — pending proposals the user hasn't seen
 4. `claude-sessions/` — most recent session summary, if any
-5. `architecture.md` History — landmark changes only; if you need older, check `history-archive.md`
+5. `architecture.md` — verify it matches actual system state (v2 is now live)
+6. `v2/lifeos.db` — row counts per table, check for test/garbage data
 
 Skipping this step is how you end up recommending things the user already rejected.
 
@@ -47,53 +48,15 @@ Skipping this step is how you end up recommending things the user already reject
 ## Common traps in this codebase
 
 - **`grep -c ... || echo 0`** in bash produces `"0\n0"` because `grep -c` outputs "0" AND exits 1 on no match. Use `VAR=$(cmd) || VAR=0` instead.
-- **Files become root-owned** every time Claude Code edits them (CC runs as root, bot runs as openclaw). qa-check.sh Check 21 catches it — but the cure is chowning at session end.
-- **`/home/openclaw/.openclaw/` is load-bearing.** It contains the gog binary (`/usr/local/bin/gog` is a symlink into it). **Never wholesale-delete it.** Only the `homebrew/` subdir matters now; the `.config/gogcli/` subdir was historically used too but is now a symlink to the canonical config (see next trap).
-- **gog has TWO config paths and they can drift.** The "real" gog config lives at `/home/openclaw/.config/gogcli/` (XDG default). A historical leftover at `/home/openclaw/.openclaw/workspace/.config/gogcli/` was used by some invocation paths (probably tied to the homebrew install location). After 2026-04-11 the second path is **symlinked** to the first so both routes hit the same fresh keyring. If you ever see `gog auth credentials list` showing `/home/openclaw/.config/gogcli/credentials.json` but the bot still gets `invalid_grant`, **check those symlinks** — if the `.openclaw/...` path has stale real files instead of symlinks to the canonical path, the bot is reading the stale token. Fix: `mv` the stale files to `.bak`, then `ln -sfn /home/openclaw/.config/gogcli/{keyring,credentials.json} <stale_path>/`.
-- **`/opt/openclaw.env` is load-bearing.** All cron jobs source it. Renaming requires touching crontab + service file + scripts in lockstep.
+- **Files become root-owned** every time Claude Code edits them (CC runs as root, bot runs as openclaw). qa-check.sh catches it — but the cure is chowning at session end.
+- **`/opt/openclaw.env` is load-bearing.** All cron jobs and systemd services source it. Renaming requires touching crontab + service file + scripts in lockstep.
 - **The `openclaw` user account name is historical** (from the OpenClaw → bot.py rebuild on 2026-04-05). Treat it as "the lifeos service account." Renaming is purely cosmetic and high coordination cost.
-- **Cost optimization vs correctness.** Per the 2026-04-08 → 2026-04-11 cycle: dropping to a cheaper model saved cents and cost ~7 `bf_wrong_source` hits per week. Integrity > efficiency. Always.
-
----
-
-## OAuth2 reauth procedure (when `gog` token is revoked)
-
-Symptom: every `read_sheet` / `write_sheet` returns `oauth2: "invalid_grant" "Token has been expired or revoked."` Bot correctly reports the failure but can't act on sheet data.
-
-**Why it happens (the actual rule):** Google expires OAuth2 refresh tokens after **7 days** for any app requesting **sensitive or restricted scopes** that hasn't passed Google verification. This applies even when the OAuth consent screen is "In production" (not just "Testing"). gog requests `drive` and `spreadsheets` (both sensitive/restricted) and the LifeOS OAuth client is unverified, so this fires every 7 days. NOT triggered by anything we did — automatic Google enforcement.
-
-Detection: `auth-heartbeat.sh` (cron `15 * * * *`) catches this within an hour of breakage and pings Telegram. The daily `qa-check.sh` Check 16 also catches it but only at 8:30am ET.
-
-**Permanent escape hatch (Phase 2 — not done yet):** Replace gog's sheet operations with the Python `google-api-python-client` library using a **service account**. Service account tokens don't expire. Works for personal Google accounts (the "Workspace only" warning in gog refers to *domain-wide delegation*, not basic service account auth). Steps would be: create a service account in Google Cloud Console, download its JSON key, share the LifeOS Sheet with the service account email, rewrite `_run_gog` / `_find_next_row` / `_write_rows_to_sheet` / `_verify_sheet_write` and the `tool_read_sheet` / `tool_write_sheet` / `tool_clear_row` tools to use the Python client. ~1 hour focused work. Trigger: when 7-day reauth becomes annoying.
-
-**Reauth flow** (gog has no OOB / device flow — only local browser callback):
-
-1. Start gog login in the **background** (not foreground — it dies when the parent shell returns):
-   ```
-   sudo -n -u openclaw bash -c '. /opt/openclaw.env && export GOG_KEYRING_PASSWORD GOG_ACCOUNT && nohup /usr/local/bin/gog login "$GOG_ACCOUNT" > /tmp/gog-login-output.txt 2>&1 &'
-   ```
-2. Read the auth URL from `/tmp/gog-login-output.txt` and give it to the user. Note the `127.0.0.1:PORT` callback in the URL — that port is what gog is listening on.
-3. User opens the URL in any browser, signs in, clicks Allow.
-4. Their browser redirects to `http://127.0.0.1:PORT/oauth2/callback?code=...` and **fails to load** ("connection refused") because their browser's loopback ≠ the box's loopback. **This is expected.**
-5. **The OAuth code is sitting in the browser's address bar** even though the page failed. User copies the entire failed URL.
-6. From the box, `curl` that exact URL — `127.0.0.1:PORT` IS reachable from the box itself, so the code reaches gog:
-   ```
-   curl -sS '<the failed URL>' -o /dev/null -w "HTTP %{http_code}\n"
-   ```
-7. HTTP 200 = success. `cat /tmp/gog-login-output.txt` should now show "Authorization received. Finishing…" and the email + services list.
-8. Verify with `gog sheets get "$SHEET_ID" "Body Metrics!A1:A1" --account "$GOG_ACCOUNT" --no-input`.
-
-**Speed matters** — gog times out after ~2-3 minutes. If it dies between user authorizing and you curling the code, restart from step 1 (the code is also single-use and expires in ~10 minutes).
-
-**Important: tell the user to `/clear` after reauth.** When the conversation history is full of "Sheets down" messages from the failure window, the model loads that history on next reply and may **claim sheets are still down without actually retrying the tool** (see `said_failed_not_tried` trap below). `/clear` wipes the in-memory conversation so the next message starts fresh.
+- **SQLite connections can't cross threads.** bot.py uses `asyncio.to_thread` for LLM calls. Any SQLite connection created in the event loop thread CANNOT be used in the worker thread. `ask_ai` must create its own connection. This bit us on 2026-04-12.
+- **Never run write-intent queries against the live DB during testing.** On 2026-04-12, adversarial probing with shorthand like "bench 275x5x3" wrote fake data to lifeos.db. Use `--no-llm` with read-only queries, or point tests at an in-memory DB.
+- **Verify model IDs against the API before deploying.** On 2026-04-12, hardcoded `claude-sonnet-4-5-20241022` which didn't exist on the API key. Always `curl /v1/models` first.
 
 ---
 
 ## More traps
 
-- **`said_failed_not_tried` (model context bias).** After a backend failure has been resolved, the bot may continue claiming the failure for several messages because `load_conversation_from_logs` feeds the model recent assistant messages including the prior failure reports. The model then *pattern-matches* on the failure pattern and skips retrying the tool — generating a "still broken" response with **zero tool calls**. This is the mirror of `said_not_did` (claiming success without action). Mitigations:
-    1. **Tell the user to `/clear`** after any backend fix (gog reauth, key rotation, etc.) before re-testing.
-    2. **qa-check Check 25** flags this pattern: assistant messages mentioning "down/revoked/failed/can't/unable" with zero corresponding tool calls in the same exchange.
-    3. Long-term: bot.py could strip or downweight failure messages from `load_conversation_from_logs` output, but this is more complex and not yet implemented.
-
-- **Bot's loaded conversation history is sticky and can poison fresh attempts.** Whenever you fix a backend issue (auth, infra, config), explicitly invalidate the conversation context by having the user `/clear`. Restarting the bot service alone doesn't help because the history is reloaded from the log file on the first message after restart.
+- **Conversation history poisoning.** After backend errors are fixed, the bot reloads today's log including error messages. The model may pattern-match on failures and claim things are still broken. Mitigations: (1) clean error entries from the log after fixing, (2) tell user to `/clear`, (3) restart bot. On 2026-04-12 we cleaned 4 broken entries from the log after fixing threading + model ID bugs.
