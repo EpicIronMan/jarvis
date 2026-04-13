@@ -1,13 +1,13 @@
 """Deterministic intent router for LifeOS v2.
 
 Given a user message string, returns an Intent (name + extracted fields) if
-any regex pattern matches. Returns None if nothing matches — callers in
-later phases fall through to an LLM classifier for truly ambiguous input.
+any regex pattern matches. Returns None if nothing matches — callers fall
+through to the LLM classifier (handlers.classify) for ambiguous input.
 
 Key property: the router EXTRACTS tokens but does not RESOLVE them. Dates
-stay as raw strings here ("today", "yesterday", "2026-04-10") and get
-resolved deterministically by handlers.dates downstream. This keeps the
-regex grammar simple and the resolution rules in one place.
+stay as raw strings here ("today", "yesterday", "3 days ago", "monday",
+"2026-04-10") and get resolved deterministically by handlers.dates downstream.
+This keeps the regex grammar simple and the resolution rules in one place.
 
 Patterns are priority-ordered — first match wins. Keep the most specific
 patterns at the top so ambiguous inputs resolve the expected way.
@@ -34,67 +34,213 @@ def _register(name: str, pattern: str, extract: Callable = lambda m: {}):
     _PATTERNS.append((name, re.compile(pattern, re.IGNORECASE), extract))
 
 
+# ---------------------------------------------------------------------------
+# Shared token fragments — reused across multiple intent patterns.
+# ---------------------------------------------------------------------------
+
+# Single date: "today", "yesterday", "now", "3 days ago", weekday names, ISO
+_D = (
+    r"(today|yesterday|now"
+    r"|\d+\s+days?\s+ago"
+    r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+    r"|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun"
+    r"|\d{4}-\d{2}-\d{2})"
+)
+
+# Range: "last 7 days", "past week", "this month", etc.
+_R = r"((?:last|past|this)\s+(?:\d+\s+days?|week|month))"
+
+# Optional leading fluff: "what is/was/are/were", "what's", "what did"
+_WH = r"(?:what(?:'?s|\s+(?:is|was|are|were|did))\s+)?"
+
+# Optional "my "
+_MY = r"(?:my\s+)?"
+
+
 # ========= stats (full omnibus snapshot) =========
 
 _register(
     "stats",
-    r"^\s*(?:what\s+(?:are|is)\s+)?(?:my\s+)?(?:stats|status|current\s+stats|full\s+stats|all\s+stats|snapshot)\s*\??\s*$",
+    r"^\s*" + _WH + _MY
+    + r"(?:stats|status|current\s+stats|full\s+stats|all\s+stats|snapshot|overview|summary|dashboard)"
+    + r"\s*\??\s*$",
+)
+_register(
+    "stats",
+    r"^\s*(?:how\s+am\s+i\s+doing|give\s+me\s+(?:a\s+)?(?:summary|overview|rundown))\s*\??\s*$",
 )
 
 
 # ========= weight =========
 
-# "weight today" / "weight yesterday" / "weight 2026-04-10"
+# weight + date: "weight today", "weight monday", "weight 3 days ago"
 _register(
     "weight_for",
-    r"^\s*(?:what(?:'?s|\s+was|\s+is)?\s+)?(?:my\s+)?weight\s+(today|yesterday|\d{4}-\d{2}-\d{2})\s*\??\s*$",
+    r"^\s*" + _WH + _MY + r"weight\s+" + _D + r"\s*\??\s*$",
     lambda m: {"date": m.group(1)},
+)
+# weight + range: "weight last 7 days", "weight this week"
+_register(
+    "weight_range",
+    r"^\s*" + _WH + _MY + r"weight\s+" + _R + r"\s*\??\s*$",
+    lambda m: {"range": m.group(1)},
+)
+# "weight trend" / "am I losing weight"
+_register(
+    "weight_range",
+    r"^\s*(?:" + _WH + _MY + r"weight\s+trend|am\s+i\s+(?:losing|gaining)\s+weight)\s*\??\s*$",
+    lambda m: {"range": "last 7 days"},
 )
 # "latest weight" / "current weight"
 _register(
     "weight_latest",
-    r"^\s*(?:what(?:'?s|\s+is)?\s+)?(?:my\s+)?(?:latest|current|most\s+recent)\s+weight\s*\??\s*$",
+    r"^\s*" + _WH + _MY + r"(?:latest|current|most\s+recent)\s+weight\s*\??\s*$",
 )
 # bare "weight" / "my weight"
 _register(
     "weight_latest",
-    r"^\s*(?:what(?:'?s|\s+is)?\s+)?(?:my\s+)?weight\s*\??\s*$",
+    r"^\s*" + _WH + _MY + r"weight\s*\??\s*$",
 )
 
 
 # ========= nutrition =========
 
+# nutrition + date
 _register(
     "nutrition_for",
-    r"^\s*(?:what\s+(?:were|was|are)\s+)?(?:my\s+)?(?:calories|cals|nutrition|protein|macros|food)\s+(today|yesterday|\d{4}-\d{2}-\d{2})\s*\??\s*$",
+    r"^\s*" + _WH + _MY
+    + r"(?:calories|cals|nutrition|protein|macros|food)\s+"
+    + _D + r"\s*\??\s*$",
     lambda m: {"date": m.group(1)},
 )
+# "what did I eat today/yesterday"
 _register(
     "nutrition_for",
-    r"^\s*(?:what\s+(?:did|have)\s+i\s+eat(?:en)?)\s+(today|yesterday|\d{4}-\d{2}-\d{2})\s*\??\s*$",
+    r"^\s*(?:what\s+(?:did|have)\s+i\s+eat(?:en)?)\s+" + _D + r"\s*\??\s*$",
     lambda m: {"date": m.group(1)},
+)
+# nutrition + range: "nutrition last 7 days", "calories this week"
+_register(
+    "nutrition_range",
+    r"^\s*" + _WH + _MY
+    + r"(?:calories|cals|nutrition|protein|macros)\s+"
+    + _R + r"\s*\??\s*$",
+    lambda m: {"range": m.group(1)},
+)
+# bare "nutrition" / "calories" / "macros" / "protein" → today
+_register(
+    "nutrition_for",
+    r"^\s*" + _WH + _MY + r"(?:calories|cals|nutrition|protein|macros)\s*\??\s*$",
+    lambda m: {"date": "today"},
+)
+# "what did I eat" (no date) → today
+_register(
+    "nutrition_for",
+    r"^\s*(?:what\s+(?:did|have)\s+i\s+eat(?:en)?)\s*\??\s*$",
+    lambda m: {"date": "today"},
 )
 
 
 # ========= training / workout =========
 
+# training + date
 _register(
     "training_for",
-    r"^\s*(?:what\s+(?:was|did)\s+)?(?:my\s+)?(?:training|workout|lift(?:ing)?|session)\s+(today|yesterday|\d{4}-\d{2}-\d{2})\s*\??\s*$",
+    r"^\s*" + _WH + _MY
+    + r"(?:training|workout|lift(?:ing)?|session|exercises?)\s+"
+    + _D + r"\s*\??\s*$",
     lambda m: {"date": m.group(1)},
 )
+# "what did I train/lift today"
+_register(
+    "training_for",
+    r"^\s*(?:what\s+did\s+i\s+(?:train|lift|do))\s+" + _D + r"\s*\??\s*$",
+    lambda m: {"date": m.group(1)},
+)
+# training + range
+_register(
+    "training_range",
+    r"^\s*" + _WH + _MY
+    + r"(?:training|workouts?|lift(?:ing|s)?|sessions?)\s+"
+    + _R + r"\s*\??\s*$",
+    lambda m: {"range": m.group(1)},
+)
+# "last workout" / "latest session" / "previous training"
 _register(
     "training_latest",
-    r"^\s*(?:what\s+was\s+)?(?:my\s+)?(?:last|latest|most\s+recent|previous)\s+(?:training|workout|lift|session)\s*\??\s*$",
+    r"^\s*" + _WH + _MY
+    + r"(?:last|latest|most\s+recent|previous)\s+(?:training|workout|lift|session)"
+    + r"\s*\??\s*$",
+)
+# bare "training" / "workout" → today
+_register(
+    "training_for",
+    r"^\s*" + _WH + _MY + r"(?:training|workout)\s*\??\s*$",
+    lambda m: {"date": "today"},
 )
 
 
 # ========= recovery / sleep / steps =========
 
+# recovery + date (including "last night" → yesterday)
 _register(
     "recovery_for",
-    r"^\s*(?:what\s+(?:was|is)\s+)?(?:my\s+)?(?:sleep|recovery|steps)\s+(today|yesterday|last\s+night|\d{4}-\d{2}-\d{2})\s*\??\s*$",
-    lambda m: {"date": "yesterday" if m.group(1).lower() == "last night" else m.group(1)},
+    r"^\s*" + _WH + _MY
+    + r"(?:sleep|recovery|steps|rest|hrv|resting\s+(?:heart\s+rate|hr))\s+"
+    + _D.replace(")", "|last\\s+night)")  # extend date token with "last night"
+    + r"\s*\??\s*$",
+    lambda m: {"date": "yesterday" if "last night" in m.group(1).lower() else m.group(1)},
+)
+# "how did I sleep" / "how was my sleep" → yesterday
+_register(
+    "recovery_for",
+    r"^\s*how\s+(?:did\s+i|was\s+(?:my\s+)?)\s*sleep\s*\??\s*$",
+    lambda m: {"date": "yesterday"},
+)
+# "how many steps" / "steps today" already covered above, but also bare:
+_register(
+    "recovery_for",
+    r"^\s*(?:how\s+many\s+)?steps\s*\??\s*$",
+    lambda m: {"date": "today"},
+)
+# recovery + range
+_register(
+    "recovery_range",
+    r"^\s*" + _WH + _MY
+    + r"(?:sleep|recovery|steps)\s+"
+    + _R + r"\s*\??\s*$",
+    lambda m: {"range": m.group(1)},
+)
+# bare "sleep" / "recovery" → yesterday for sleep, today for recovery
+_register(
+    "recovery_for",
+    r"^\s*" + _WH + _MY + r"sleep\s*\??\s*$",
+    lambda m: {"date": "yesterday"},
+)
+_register(
+    "recovery_for",
+    r"^\s*" + _WH + _MY + r"recovery\s*\??\s*$",
+    lambda m: {"date": "today"},
+)
+
+
+# ========= cardio =========
+
+# cardio + date
+_register(
+    "cardio_for",
+    r"^\s*" + _WH + _MY + r"cardio\s+" + _D + r"\s*\??\s*$",
+    lambda m: {"date": m.group(1)},
+)
+# "last cardio" / "recent cardio"
+_register(
+    "cardio_latest",
+    r"^\s*" + _WH + _MY + r"(?:last|latest|most\s+recent|previous|recent)\s+cardio\s*\??\s*$",
+)
+# bare "cardio"
+_register(
+    "cardio_latest",
+    r"^\s*" + _WH + _MY + r"cardio\s*\??\s*$",
 )
 
 
@@ -102,7 +248,9 @@ _register(
 
 _register(
     "body_scan_latest",
-    r"^\s*(?:what(?:'?s|\s+is)\s+)?(?:my\s+)?(?:latest\s+)?(?:dexa|body\s+scan|body\s+fat|lean\s+mass|bf\s*%?)\s*\??\s*$",
+    r"^\s*" + _WH + _MY
+    + r"(?:latest\s+)?(?:dexa|body\s+scan|body\s+fat|lean\s+mass|bf\s*%?|body\s+composition)"
+    + r"\s*\??\s*$",
 )
 
 
@@ -110,11 +258,15 @@ _register(
 
 _register(
     "routine_today",
-    r"^\s*(?:what\s+(?:should\s+i\s+(?:do|train|lift)|am\s+i\s+doing))\s+today\s*\??\s*$",
+    r"^\s*(?:what\s+(?:should\s+i\s+(?:do|train|lift|work\s+on)|am\s+i\s+doing))\s+today\s*\??\s*$",
 )
 _register(
     "routine_today",
     r"^\s*(?:today'?s?|my)\s+routine\s*\??\s*$",
+)
+_register(
+    "routine_today",
+    r"^\s*(?:what'?s?\s+(?:on\s+)?(?:the\s+)?plan\s+(?:for\s+)?today)\s*\??\s*$",
 )
 
 
@@ -123,7 +275,7 @@ _register(
 # "last time i did X" / "last session X" / "last X"
 _register(
     "last_exercise",
-    r"^\s*(?:when\s+was\s+)?(?:my\s+)?last\s+(?:session\s+of\s+|time\s+(?:i\s+did|doing)\s+)?([a-z][a-z0-9 '\-]*?)\s*\??\s*$",
+    r"^\s*(?:when\s+was\s+)?(?:my\s+)?last\s+(?:session\s+(?:of|with)\s+|time\s+(?:i\s+did|doing)\s+)?([a-z][a-z0-9 '\-]*?)\s*\??\s*$",
     lambda m: {"exercise": m.group(1).strip()},
 )
 
@@ -151,3 +303,8 @@ def list_intents() -> list[str]:
         if name not in seen:
             seen.append(name)
     return seen
+
+
+def all_intent_names() -> set[str]:
+    """All unique intent names — used by classify.py to validate LLM output."""
+    return {name for name, _, _ in _PATTERNS}

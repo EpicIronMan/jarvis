@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""lifeos_cli.py — deterministic read-path smoke test for LifeOS v2.
+"""lifeos_cli.py — deterministic read-path harness for LifeOS v2.
 
 Takes a Telegram-style message string, runs it through the router, dispatches
-to a query handler, and prints the structured result as JSON. NOT wired to
-Telegram. This is the Phase 1 validation tool — run a representative query
-against the imported lifeos.db and eyeball the output.
+to a query handler, and prints the structured result as JSON. If the router
+misses, falls through to the LLM classifier (handlers.classify).
 
 Usage:
     python3 lifeos_cli.py "what are my stats"
     python3 lifeos_cli.py "weight yesterday"
-    python3 lifeos_cli.py "nutrition today"
-    python3 lifeos_cli.py "last workout"
-    python3 lifeos_cli.py "latest dexa"
+    python3 lifeos_cli.py "nutrition last 7 days"
+    python3 lifeos_cli.py "how did I sleep"
+    python3 lifeos_cli.py "last bench"
     python3 lifeos_cli.py --list-intents
 
 Exit codes:
     0  — routed and handled (even if result is empty)
     1  — routed but handler errored
-    2  — unroutable message (no pattern matched)
+    2  — unroutable message (no pattern matched AND LLM couldn't classify)
     3  — usage error
 """
 
@@ -43,8 +42,8 @@ def handle(intent: Intent, conn: sqlite3.Connection) -> dict:
     """Dispatch a routed Intent to the appropriate query function.
 
     Returns a result envelope dict. Always includes 'intent'. May include
-    'date' (if the intent carried a date), 'result' (handler output), or
-    'error' (if handler couldn't proceed).
+    'date'/'range' (if the intent carried one), 'result' (handler output),
+    or 'error' (if handler couldn't proceed).
     """
     name = intent.name
     f = intent.fields
@@ -58,6 +57,8 @@ def handle(intent: Intent, conn: sqlite3.Connection) -> dict:
         return {"intent": name, "result": query.last_training_session(conn)}
     if name == "body_scan_latest":
         return {"intent": name, "result": query.latest_body_scan(conn)}
+    if name == "cardio_latest":
+        return {"intent": name, "result": query.cardio_recent(conn)}
     if name == "routine_today":
         return {
             "intent": name,
@@ -68,7 +69,7 @@ def handle(intent: Intent, conn: sqlite3.Connection) -> dict:
         }
 
     # --- date-bearing intents ---
-    if name in ("weight_for", "nutrition_for", "training_for", "recovery_for"):
+    if name in ("weight_for", "nutrition_for", "training_for", "recovery_for", "cardio_for"):
         raw = f.get("date", "")
         d = dates.resolve_date(raw)
         if not d:
@@ -81,6 +82,24 @@ def handle(intent: Intent, conn: sqlite3.Connection) -> dict:
             return {"intent": name, "date": d, "result": query.training_on_date(conn, d)}
         if name == "recovery_for":
             return {"intent": name, "date": d, "result": query.recovery_for_date(conn, d)}
+        if name == "cardio_for":
+            return {"intent": name, "date": d, "result": query.cardio_on_date(conn, d)}
+
+    # --- range intents ---
+    if name in ("weight_range", "nutrition_range", "training_range", "recovery_range"):
+        raw = f.get("range", "")
+        r = dates.resolve_range(raw)
+        if not r:
+            return {"intent": name, "error": f"could not resolve range token: {raw!r}"}
+        start, end = r
+        if name == "weight_range":
+            return {"intent": name, "range": [start, end], "result": query.weight_range(conn, start, end)}
+        if name == "nutrition_range":
+            return {"intent": name, "range": [start, end], "result": query.nutrition_range_summary(conn, start, end)}
+        if name == "training_range":
+            return {"intent": name, "range": [start, end], "result": query.training_range(conn, start, end)}
+        if name == "recovery_range":
+            return {"intent": name, "range": [start, end], "result": query.recovery_range(conn, start, end)}
 
     # --- last session of a specific exercise ---
     if name == "last_exercise":
@@ -93,11 +112,13 @@ def handle(intent: Intent, conn: sqlite3.Connection) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="LifeOS v2 read-path smoke test")
+    ap = argparse.ArgumentParser(description="LifeOS v2 read-path harness")
     ap.add_argument("message", nargs="*", help="the Telegram-style message to route")
     ap.add_argument("--db", default=str(DB_PATH), help="path to lifeos.db")
     ap.add_argument("--list-intents", action="store_true",
                     help="list all registered router intent names and exit")
+    ap.add_argument("--no-llm", action="store_true",
+                    help="disable LLM fallback classifier (router-only mode)")
     args = ap.parse_args()
 
     if args.list_intents:
@@ -111,11 +132,26 @@ def main():
 
     message = " ".join(args.message)
     intent = route(message)
+    source = "router"
+
+    # LLM fallback if router missed
+    if intent is None and not args.no_llm:
+        try:
+            from handlers.classify import classify
+            result = classify(message)
+            if result and result.get("intent") and result["intent"] != "unknown":
+                intent = Intent(name=result["intent"], fields=result.get("fields", {}))
+                source = "llm_classifier"
+        except Exception as e:
+            # LLM classifier failed — fall through to unroutable
+            source = f"llm_error: {e}"
+
     if intent is None:
         print(json.dumps({
             "message": message,
             "routed": False,
-            "note": "no pattern matched; in production this falls through to LLM classifier",
+            "source": source,
+            "note": "no pattern matched and LLM classifier could not classify",
         }, indent=2, default=str))
         return 2
 
@@ -142,7 +178,7 @@ def main():
         except Exception:
             pass
 
-    envelope = {"message": message, "routed": True, **result}
+    envelope = {"message": message, "routed": True, "source": source, **result}
     print(json.dumps(envelope, indent=2, default=str))
     return 0 if "error" not in result else 1
 
