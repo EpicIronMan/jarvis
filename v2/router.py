@@ -270,6 +270,55 @@ _register(
 )
 
 
+# ========= write intents =========
+
+# "log weight 172" / "weight 172 lbs" / "log weight 172.5 renpho"
+_register(
+    "log_weight",
+    r"^\s*(?:log\s+)?weight\s+(\d+(?:\.\d+)?)\s*(?:lbs?)?\s*(renpho|fitbit|manual)?\s*$",
+    lambda m: {"weight_lbs": float(m.group(1)), "source": (m.group(2) or "TELEGRAM").upper()},
+)
+
+# Workout shorthand: "bench 275x5x3" / "bench 275x5x3 @8"
+# Pattern: exercise_name weight x reps x sets [@ rpe]
+_register(
+    "log_workout_shorthand",
+    r"^\s*([a-zA-Z][a-zA-Z \']+?)\s+(\d+(?:\.\d+)?)x(\d+)x(\d+)\s*(?:@\s*(\d+(?:\.\d+)?))?\s*$",
+    lambda m: {
+        "exercises": [{"name": m.group(1).strip(), "weight_lbs": float(m.group(2)),
+                       "reps": int(m.group(3)), "sets": int(m.group(4)),
+                       "rpe": float(m.group(5)) if m.group(5) else None}],
+    },
+)
+
+# "log nutrition 2100 cal 170g protein" / "log 2100 cal 170 protein"
+_register(
+    "log_nutrition_shorthand",
+    r"^\s*(?:log\s+)?(?:nutrition\s+)?(\d+)\s*(?:cal(?:ories?)?\s+)(\d+)\s*g?\s*(?:protein|prot|p)\s*$",
+    lambda m: {"calories": float(m.group(1)), "protein_g": float(m.group(2))},
+)
+
+# "rename exercise old name to new name"
+_register(
+    "rename_exercise",
+    r"^\s*rename\s+(?:exercise\s+)?(.+?)\s+to\s+(.+?)\s*$",
+    lambda m: {"old_name": m.group(1).strip(), "new_name": m.group(2).strip()},
+)
+
+# "edit weight 2026-04-10 to 171.5"
+_register(
+    "edit_weight",
+    r"^\s*edit\s+weight\s+(\d{4}-\d{2}-\d{2})\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*$",
+    lambda m: {"date": m.group(1), "weight_lbs": float(m.group(2))},
+)
+
+# "sync fitbit" / "fitbit sync"
+_register(
+    "sync_fitbit",
+    r"^\s*(?:sync\s+fitbit|fitbit\s+sync|pull\s+fitbit)\s*$",
+)
+
+
 # ========= last session of specific exercise =========
 
 # "last time i did X" / "last session X" / "last X"

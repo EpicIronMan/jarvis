@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""LifeOS Bot — single-agent AI fitness coach via Telegram.
+"""LifeOS Bot v2 — deterministic CRUD + Claude Sonnet coaching via Telegram.
 
-All code, config, and docs live in /home/openclaw/lifeos/ (git repo).
-See architecture.md for the full system map.
+Architecture (v2):
+  - CRUD (weight, nutrition, training, recovery, cardio, stats): deterministic
+    Python router → SQLite handlers. No LLM involved in data operations.
+  - Coaching, analysis, ambiguous queries: Claude Sonnet via Anthropic SDK.
+  - DEXA PDF parsing: Claude vision (narrow scope, extracts numbers only).
+  - All data lives in v2/lifeos.db (SQLite). Sheets is a one-way read-only mirror.
 
-Config is driven by environment variables — swap the AI model, API provider,
-or chat platform by changing env vars, not code.
+See architecture.md and v2/README.md for the full system map.
 """
 
 import os
@@ -18,7 +21,7 @@ import asyncio
 import base64
 import io
 import re
-import time
+import sys
 
 from telegram import Update
 from telegram.ext import (
@@ -28,449 +31,605 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from openai import OpenAI
+import anthropic
+from zoneinfo import ZoneInfo
 
-# --- Config (all from env vars — no personal info in code) ---
+# --- Config ---
 CHAT_ID = int(os.environ["CHAT_ID"])
-SHEET_ID = os.environ["SHEET_ID"]
-DRIVE_UPLOADS_FOLDER = os.environ["DRIVE_UPLOADS_FOLDER"]
-UPLOAD_INDEX_FILE_ID = os.environ["UPLOAD_INDEX_FILE_ID"]
-GOG = os.environ.get("GOG_PATH", "/usr/local/bin/gog")
-GOG_ACCOUNT = os.environ["GOG_ACCOUNT"]
+ET = ZoneInfo("America/Toronto")
 
 BASE_DIR = pathlib.Path(os.environ.get("LIFEOS_DIR", "/home/openclaw/lifeos"))
+V2_DIR = BASE_DIR / "v2"
+DB_PATH = V2_DIR / "lifeos.db"
 MEMORY_DIR = BASE_DIR / "memory"
 LOG_DIR = BASE_DIR / "logs"
 UPLOAD_DIR = BASE_DIR / "uploads"
 SOUL_PATH = BASE_DIR / "soul.md"
 
-# AI model config — swap provider by changing these env vars
-AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("XAI_API_KEY", "")
-AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.x.ai/v1")
-MODEL = os.environ.get("AI_MODEL", "grok-4.20-0309-reasoning")
+# Add v2 to path for imports
+sys.path.insert(0, str(V2_DIR))
 
-# Agent identity — configurable for rebranding
+from router import route, Intent, all_intent_names
+from handlers import dates, query, log as log_handlers
+from handlers.classify import classify
+
 AGENT_NAME = os.environ.get("AGENT_NAME", "J.A.R.V.I.S.")
-AGENT_EMOJI = os.environ.get("AGENT_EMOJI", "🤖")
-
-MAX_TOOL_ROUNDS = int(os.environ.get("MAX_TOOL_ROUNDS", "10"))
+AGENT_EMOJI = os.environ.get("AGENT_EMOJI", "\U0001f916")
 MAX_CONVERSATION_MESSAGES = int(os.environ.get("MAX_CONVERSATION_MESSAGES", "200"))
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
-log = logging.getLogger("lifeos")
+lg = logging.getLogger("lifeos")
 
-# --- Load system prompt ---
+# --- Anthropic client ---
+_anthropic_client = anthropic.Anthropic(
+    api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
+)
+MODEL = "claude-sonnet-4-5-20241022"
 
+
+# --- System prompt ---
 
 def _build_system_prompt() -> str:
-    """Build system prompt with current date/time and sheet link injected.
-
-    Reads soul.md from disk every call so edits take effect without restart.
-    """
-    from zoneinfo import ZoneInfo
     soul_text = SOUL_PATH.read_text() if SOUL_PATH.exists() else ""
-    now = datetime.datetime.now(ZoneInfo("America/Toronto"))
-    context = (
-        f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
-        f"Google Sheet link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit\n"
+    now = datetime.datetime.now(ET)
+    return (
+        soul_text
+        + f"\n\nCurrent date/time: {now.strftime('%A, %Y-%m-%d %I:%M %p')} ET\n"
     )
-    return soul_text + context
 
-# --- gog environment ---
-GOG_ENV = {
-    **os.environ,
-    "HOME": "/home/openclaw",
-    "GOG_ACCOUNT": GOG_ACCOUNT,
-    "GOG_KEYRING_PASSWORD": os.environ.get("GOG_KEYRING_PASSWORD", ""),
-}
 
-# --- Tool definitions (OpenAI format) ---
+# --- Formatting helpers ---
+
+def _format_result(intent_name: str, result: dict | list | None, fields: dict = None) -> str:
+    """Format a handler result into a readable Telegram message."""
+    if result is None:
+        return "No data found."
+
+    if isinstance(result, dict) and "error" in result:
+        return f"Error: {result['error']}"
+
+    if isinstance(result, dict) and "note" in result:
+        return result["note"]
+
+    # Stats snapshot
+    if intent_name == "stats":
+        return _format_stats(result)
+
+    # Weight
+    if intent_name == "weight_latest" and isinstance(result, dict):
+        return f"Weight ({result.get('date', '?')}): {result.get('weight_lbs', '?')} lbs ({result.get('weight_kg', '?')} kg)"
+
+    if intent_name == "weight_for" and isinstance(result, dict):
+        return f"Weight ({result.get('date', '?')}): {result.get('weight_lbs', '?')} lbs"
+
+    if intent_name == "weight_range" and isinstance(result, dict):
+        n = result.get("n", 0)
+        if n == 0:
+            return "No weight data for that range."
+        return (
+            f"Weight trend ({n} days): {result.get('start_weight')} → {result.get('end_weight')} lbs "
+            f"({result.get('change', 0):+.1f} lbs)\n"
+            f"Range: {result.get('min_weight')} – {result.get('max_weight')} lbs"
+        )
+
+    # Nutrition
+    if intent_name == "nutrition_for" and isinstance(result, dict):
+        return (
+            f"Nutrition ({result.get('date', '?')}): {result.get('calories', '?')} cal, "
+            f"{result.get('protein_g', '?')}g protein"
+        )
+
+    if intent_name == "nutrition_range" and isinstance(result, dict):
+        return (
+            f"Nutrition avg ({result.get('n_with_calories', '?')} days): "
+            f"{result.get('avg_calories', '?')} cal, {result.get('avg_protein_g', '?')}g protein"
+        )
+
+    # Training
+    if intent_name in ("training_for", "training_latest"):
+        if isinstance(result, dict) and "exercises" in result:
+            exercises = result.get("exercises", [])
+            if not exercises:
+                return f"No training logged for {result.get('date', 'that date')}."
+            lines = [f"Training ({result.get('date', '?')}):"]
+            for ex in exercises:
+                rpe = f" @{ex['rpe']}" if ex.get('rpe') else ""
+                lines.append(f"  {ex['exercise']}: {ex['sets']}x{ex['reps']} @ {ex['weight_lbs']} lbs{rpe}")
+            return "\n".join(lines)
+        if isinstance(result, list):
+            if not result:
+                return "No training logged for that date."
+            lines = [f"Training ({result[0].get('date', '?')}):"]
+            for ex in result:
+                rpe = f" @{ex['rpe']}" if ex.get('rpe') else ""
+                lines.append(f"  {ex['exercise']}: {ex['sets']}x{ex['reps']} @ {ex['weight_lbs']} lbs{rpe}")
+            return "\n".join(lines)
+
+    if intent_name == "training_range" and isinstance(result, dict):
+        return (
+            f"Training ({result.get('n_sessions', 0)} sessions, "
+            f"{result.get('n_exercises', 0)} exercises): {', '.join(result.get('dates', []))}"
+        )
+
+    # Recovery
+    if intent_name == "recovery_for" and isinstance(result, dict):
+        parts = [f"Recovery ({result.get('date', '?')}):"]
+        if result.get('sleep_hours') is not None:
+            parts.append(f"  Sleep: {result['sleep_hours']}h")
+        if result.get('efficiency_pct') is not None:
+            parts.append(f"  Efficiency: {result['efficiency_pct']}%")
+        if result.get('steps') is not None:
+            parts.append(f"  Steps: {result['steps']:,}")
+        if result.get('resting_hr') is not None:
+            parts.append(f"  Resting HR: {result['resting_hr']} bpm")
+        return "\n".join(parts)
+
+    if intent_name == "recovery_range" and isinstance(result, dict):
+        return (
+            f"Recovery avg ({result.get('n', 0)} days): "
+            f"{result.get('avg_sleep_hours', '?')}h sleep, {result.get('avg_steps', '?')} steps"
+        )
+
+    # Body scan
+    if intent_name == "body_scan_latest" and isinstance(result, dict):
+        return (
+            f"DEXA ({result.get('date', '?')}): {result.get('total_bf_pct', '?')}% BF, "
+            f"{result.get('lean_mass_lbs', '?')} lbs lean mass, "
+            f"RMR {result.get('rmr_cal', '?')} cal"
+        )
+
+    # Cardio
+    if intent_name == "cardio_latest" and isinstance(result, list):
+        if not result:
+            return "No cardio sessions logged."
+        lines = ["Recent cardio:"]
+        for c in result[:5]:
+            lines.append(f"  {c.get('date', '?')}: {c.get('exercise', '?')} {c.get('duration_min', '?')}min")
+        return "\n".join(lines)
+
+    if intent_name == "cardio_for" and isinstance(result, list):
+        if not result:
+            return "No cardio logged for that date."
+        lines = []
+        for c in result:
+            lines.append(f"Cardio ({c.get('date', '?')}): {c.get('exercise', '?')} {c.get('duration_min', '?')}min, {c.get('net_calories', '?')} cal")
+        return "\n".join(lines)
+
+    # Write confirmations
+    if intent_name in ("log_weight", "log_workout_shorthand", "log_nutrition_shorthand",
+                        "log_cardio", "log_body_scan", "rename_exercise", "edit_weight"):
+        return _format_write_confirmation(result)
+
+    # Last exercise
+    if intent_name == "last_exercise" and isinstance(result, dict):
+        if not result.get("date"):
+            ex = fields.get("exercise", "that exercise") if fields else "that exercise"
+            return f"No sessions found for '{ex}'."
+        matched = result.get("matched_exercise", "")
+        exercises = result.get("exercises", [])
+        lines = [f"Last session with {matched} ({result['date']}):"]
+        for ex in exercises:
+            rpe = f" @{ex['rpe']}" if ex.get('rpe') else ""
+            lines.append(f"  {ex['exercise']}: {ex['sets']}x{ex['reps']} @ {ex['weight_lbs']} lbs{rpe}")
+        return "\n".join(lines)
+
+    # Fallback: JSON dump
+    return json.dumps(result, indent=2, default=str)
+
+
+def _format_stats(result: dict) -> str:
+    lines = ["Here's your current snapshot:"]
+
+    w = result.get("latest_weight")
+    if w:
+        lines.append(f"\nWeight: {w.get('weight_lbs', '?')} lbs ({w.get('date', '?')})")
+
+    scan = result.get("latest_body_scan")
+    if scan:
+        lines.append(f"DEXA BF%: {scan.get('total_bf_pct', '?')}% ({scan.get('date', '?')})")
+        if scan.get("lean_mass_lbs"):
+            lines.append(f"Lean mass: {scan['lean_mass_lbs']} lbs")
+
+    nut = result.get("nutrition", {})
+    nut_data = nut.get("data") if isinstance(nut, dict) else nut
+    if nut_data:
+        label = f" ({nut.get('as_of', '')})" if isinstance(nut, dict) else ""
+        lines.append(f"\nNutrition{label}: {nut_data.get('calories', '?')} cal, {nut_data.get('protein_g', '?')}g protein")
+
+    rec = result.get("recovery", {})
+    rec_data = rec.get("data") if isinstance(rec, dict) else rec
+    if rec_data:
+        label = f" ({rec.get('as_of', '')})" if isinstance(rec, dict) else ""
+        parts = []
+        if rec_data.get("sleep_hours"):
+            parts.append(f"{rec_data['sleep_hours']}h sleep")
+        if rec_data.get("steps"):
+            parts.append(f"{rec_data['steps']:,} steps")
+        if parts:
+            lines.append(f"Recovery{label}: {', '.join(parts)}")
+
+    t = result.get("last_training")
+    if t and t.get("date"):
+        exercises = [ex["exercise"] for ex in t.get("exercises", [])[:4]]
+        lines.append(f"\nLast workout ({t['date']}): {', '.join(exercises)}")
+
+    return "\n".join(lines)
+
+
+def _format_write_confirmation(result: dict) -> str:
+    action = result.get("action", "unknown")
+    if action == "log_weight":
+        return f"Logged weight: {result.get('weight_lbs')} lbs ({result.get('weight_kg')} kg) on {result.get('date')}"
+    if action == "log_workout":
+        exercises = result.get("exercises", [])
+        names = [e["exercise"] for e in exercises]
+        return f"Logged {len(exercises)} exercises ({', '.join(names)}), total volume: {result.get('total_volume', 0):,.0f} lbs"
+    if action == "log_nutrition":
+        return f"Logged nutrition: {result.get('calories')} cal, {result.get('protein_g')}g protein on {result.get('date')}"
+    if action == "log_cardio":
+        return f"Logged cardio: {result.get('exercise')} {result.get('duration_min')}min, {result.get('net_calories')} cal"
+    if action == "rename_exercise":
+        return f"Renamed '{result.get('old_name')}' → '{result.get('new_name')}' ({result.get('rows_updated', 0)} rows updated)"
+    if action == "edit_weight":
+        return f"Updated weight for {result.get('date')}: {result.get('weight_lbs')} lbs"
+    return json.dumps(result, default=str)
+
+
+# --- v2 CRUD dispatch ---
+
+def _handle_crud(intent: Intent, conn) -> str:
+    """Dispatch a routed intent to the appropriate handler. Returns formatted text."""
+    name = intent.name
+    f = intent.fields
+
+    # Read intents (zero-field)
+    if name == "stats":
+        return _format_result(name, query.stats_snapshot(conn))
+    if name == "weight_latest":
+        return _format_result(name, query.latest_weight(conn))
+    if name == "training_latest":
+        return _format_result(name, query.last_training_session(conn))
+    if name == "body_scan_latest":
+        return _format_result(name, query.latest_body_scan(conn))
+    if name == "cardio_latest":
+        return _format_result(name, query.cardio_recent(conn))
+    if name == "routine_today":
+        return "Routine table not yet seeded. Tell me your weekly split and I'll set it up."
+
+    # Date-bearing reads
+    if name in ("weight_for", "nutrition_for", "training_for", "recovery_for", "cardio_for"):
+        raw = f.get("date", "")
+        d = dates.resolve_date(raw)
+        if not d:
+            return f"Couldn't resolve date: '{raw}'"
+        handlers = {
+            "weight_for": lambda: query.weight_for_date(conn, d),
+            "nutrition_for": lambda: query.nutrition_for_date(conn, d),
+            "training_for": lambda: query.training_on_date(conn, d),
+            "recovery_for": lambda: query.recovery_for_date(conn, d),
+            "cardio_for": lambda: query.cardio_on_date(conn, d),
+        }
+        result = handlers[name]()
+        return _format_result(name, result, f)
+
+    # Range reads
+    if name in ("weight_range", "nutrition_range", "training_range", "recovery_range"):
+        raw = f.get("range", "")
+        r = dates.resolve_range(raw)
+        if not r:
+            return f"Couldn't resolve range: '{raw}'"
+        start, end = r
+        handlers = {
+            "weight_range": lambda: query.weight_range(conn, start, end),
+            "nutrition_range": lambda: query.nutrition_range_summary(conn, start, end),
+            "training_range": lambda: query.training_range(conn, start, end),
+            "recovery_range": lambda: query.recovery_range(conn, start, end),
+        }
+        return _format_result(name, handlers[name](), f)
+
+    # Exercise lookup
+    if name == "last_exercise":
+        ex = f.get("exercise", "").strip()
+        if not ex:
+            return "No exercise specified."
+        return _format_result(name, query.last_session_of_exercise(conn, ex), f)
+
+    # Write intents
+    if name == "log_weight":
+        result = log_handlers.log_weight(conn, f["weight_lbs"], source=f.get("source", "TELEGRAM"))
+        return _format_result(name, result)
+    if name == "log_workout_shorthand":
+        result = log_handlers.log_workout(conn, f["exercises"])
+        return _format_result(name, result)
+    if name == "log_nutrition_shorthand":
+        result = log_handlers.log_nutrition(conn, f["calories"], f["protein_g"])
+        return _format_result(name, result)
+    if name == "rename_exercise":
+        result = log_handlers.rename_exercise(conn, f["old_name"], f["new_name"])
+        return _format_result(name, result)
+    if name == "edit_weight":
+        result = log_handlers.edit_weight(conn, f["date"], f["weight_lbs"])
+        return _format_result(name, result)
+    if name == "sync_fitbit":
+        return _do_fitbit_sync()
+
+    return f"Intent '{name}' recognized but no handler implemented."
+
+
+def _do_fitbit_sync() -> str:
+    try:
+        result = subprocess.run(
+            ["python3", str(V2_DIR / "ingest_fitbit.py")],
+            capture_output=True, text=True, timeout=60,
+            env={**os.environ, "HOME": "/home/openclaw"},
+        )
+        if result.returncode != 0:
+            return f"Fitbit sync failed: {result.stderr.strip()[:300]}"
+        return "Fitbit sync completed — data updated in SQLite."
+    except subprocess.TimeoutExpired:
+        return "Fitbit sync timed out after 60s."
+
+
+# --- LLM tools (for coaching/analysis mode) ---
+
 TOOLS = [
     {
-        "type": "function",
-        "function": {
-            "name": "log_workout",
-            "description": (
-                "Log workout exercises to the Training Log Google Sheet. "
-                "Columns: Date | Exercise | Sets | Reps | Weight (lbs) | RPE | Volume (lbs) | Session Type | Data Source"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "exercises": {
-                        "type": "array",
-                        "description": "List of exercises performed",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {"type": "string", "description": "Exercise name"},
-                                "sets": {"type": "integer"},
-                                "reps": {"type": "integer"},
-                                "weight_lbs": {"type": "number"},
-                                "rpe": {"type": "number", "description": "Rate of perceived exertion (1-10), optional"},
-                            },
-                            "required": ["name", "sets", "reps", "weight_lbs"],
+        "name": "save_memory",
+        "description": "Save a user decision, preference, or goal to memory.md.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entry": {"type": "string", "description": "What to remember"},
+            },
+            "required": ["entry"],
+        },
+    },
+    {
+        "name": "propose_soul_change",
+        "description": "Propose a change to soul.md behavioral rules for Claude Code to review.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "proposed_text": {"type": "string"},
+                "section": {"type": "string"},
+                "reasoning": {"type": "string"},
+                "source_message": {"type": "string"},
+            },
+            "required": ["proposed_text", "section", "reasoning", "source_message"],
+        },
+    },
+    {
+        "name": "read_memory",
+        "description": "Read the user's saved memories and goals.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "query_data",
+        "description": (
+            "Query fitness data from SQLite. Use this when you need data to answer a coaching question. "
+            "Available queries: stats, weight_latest, weight_for, weight_range, nutrition_for, "
+            "nutrition_range, training_for, training_latest, training_range, recovery_for, "
+            "recovery_range, body_scan_latest, cardio_latest, last_exercise."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "intent": {"type": "string", "description": "Query intent name"},
+                "date": {"type": "string", "description": "Date token (today, yesterday, 2026-04-10, etc.)"},
+                "range": {"type": "string", "description": "Range token (last 7 days, this week, etc.)"},
+                "exercise": {"type": "string", "description": "Exercise name for last_exercise queries"},
+            },
+            "required": ["intent"],
+        },
+    },
+    {
+        "name": "log_workout",
+        "description": "Log workout exercises to SQLite.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "exercises": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "sets": {"type": "integer"},
+                            "reps": {"type": "integer"},
+                            "weight_lbs": {"type": "number"},
+                            "rpe": {"type": "number"},
                         },
-                    },
-                    "session_type": {
-                        "type": "string",
-                        "description": "e.g. BRO_SPLIT, PUSH_PULL_LEGS",
-                        "default": "BRO_SPLIT",
+                        "required": ["name", "sets", "reps", "weight_lbs"],
                     },
                 },
-                "required": ["exercises"],
+                "session_type": {"type": "string"},
             },
+            "required": ["exercises"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "log_weight",
-            "description": (
-                "Log a body weight entry to Body Metrics Google Sheet. "
-                "Columns: Date | Weight (lbs) | Weight (kg) | Body Fat % | Muscle Mass (kg) | Water % | BMI | Data Source | Notes"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "weight_lbs": {"type": "number"},
-                    "body_fat_pct": {"type": "number", "description": "Optional body fat %"},
-                    "data_source": {"type": "string", "default": "RENPHO"},
-                    "notes": {"type": "string", "default": ""},
-                },
-                "required": ["weight_lbs"],
+        "name": "log_weight",
+        "description": "Log a body weight entry to SQLite.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "weight_lbs": {"type": "number"},
+                "source": {"type": "string"},
+                "notes": {"type": "string"},
             },
+            "required": ["weight_lbs"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "log_nutrition",
-            "description": (
-                "Log daily nutrition to Nutrition Google Sheet. "
-                "Columns: Date | Calories | Protein (g) | Carbs (g) | Fat (g) | Fiber (g) | Sodium (mg) | Data Source | Notes"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "calories": {"type": "number"},
-                    "protein_g": {"type": "number"},
-                    "carbs_g": {"type": "number"},
-                    "fat_g": {"type": "number"},
-                    "fiber_g": {"type": "number"},
-                    "sodium_mg": {"type": "number"},
-                    "data_source": {"type": "string", "default": "MFP"},
-                    "notes": {"type": "string", "default": ""},
-                },
-                "required": ["calories", "protein_g"],
+        "name": "log_nutrition",
+        "description": "Log daily nutrition to SQLite.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "calories": {"type": "number"},
+                "protein_g": {"type": "number"},
+                "carbs_g": {"type": "number"},
+                "fat_g": {"type": "number"},
             },
+            "required": ["calories", "protein_g"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "log_cardio",
-            "description": (
-                "Log a cardio session to the Cardio Google Sheet tab. "
-                "Columns: Date | Exercise | Duration (min) | Speed | Incline | Net Calories | MET Used | Data Source | Notes. "
-                "Use this for treadmill, cycling, HIIT, running, swimming, etc. NOT for strength training."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "exercise": {"type": "string", "description": "e.g. Treadmill, Outdoor Run, Cycling, HIIT, Spin Class"},
-                    "duration_min": {"type": "number", "description": "Duration in minutes"},
-                    "speed": {"type": "number", "description": "Speed (mph or equivalent), 0 if N/A"},
-                    "incline": {"type": "number", "description": "Incline %, 0 if flat"},
-                    "net_calories": {"type": "number", "description": "Net calories burned (gross minus baseline)"},
-                    "met_used": {"type": "number", "description": "MET value used for the calculation"},
-                    "notes": {"type": "string", "default": "", "description": "Calculation breakdown, formula, or other context"},
-                },
-                "required": ["exercise", "duration_min", "net_calories", "met_used"],
+        "name": "log_cardio",
+        "description": "Log a cardio session to SQLite.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "exercise": {"type": "string"},
+                "duration_min": {"type": "number"},
+                "net_calories": {"type": "number"},
+                "met_used": {"type": "number"},
+                "notes": {"type": "string"},
             },
+            "required": ["exercise", "duration_min", "net_calories"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "read_sheet",
-            "description": (
-                "Read recent rows from any tab in the Google Sheet. "
-                "Available tabs: Training Log, Body Metrics, Nutrition, Recovery, Body Scans, Body Measurements, Cardio"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "tab": {"type": "string", "description": "Sheet tab name"},
-                    "rows": {"type": "integer", "description": "Number of recent rows to return (default 10)", "default": 10},
-                },
-                "required": ["tab"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "write_sheet",
-            "description": (
-                "Write to any cell or range in the Google Sheet. Use for editing cells, "
-                "adding columns, or fixing data. Requires a reason explaining WHY the "
-                "change is being made."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "range": {
-                        "type": "string",
-                        "description": "Sheet range in A1 notation (e.g. 'Body Scans!P1' for a single cell, 'Body Scans!P1:P2' for a range)",
-                    },
-                    "values": {
-                        "type": "array",
-                        "description": "2D array of values to write (rows x cols), e.g. [['RMR (cal/day)'], ['1618']]",
-                        "items": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "Why this change is being made (e.g. 'Extracted RMR from DEXA PDF 2026-04-02')",
-                    },
-                },
-                "required": ["range", "values", "reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "clear_row",
-            "description": (
-                "Clear (blank out) a row or range in the Google Sheet. Use this to remove "
-                "bad data, duplicates, or entries that belong in a different tab."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "range": {
-                        "type": "string",
-                        "description": "Sheet range in A1 notation (e.g. 'Training Log!A5:J5' to clear row 5)",
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "Why this row is being cleared",
-                    },
-                },
-                "required": ["range", "reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "save_memory",
-            "description": "Append an entry to memory.md. Use only for user decisions, routine changes, and personal preferences. NOT for rules, algorithms, or formulas — those belong in soul.md (tell user to have Claude Code update it). Include the date and context.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "entry": {"type": "string", "description": "What to remember (e.g. '2026-04-06: Weight goal timeline — target 150lbs by July, 1.5lbs/week')"},
-                },
-                "required": ["entry"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "propose_soul_change",
-            "description": (
-                "Propose a change to soul.md (behavioral rules, reasoning principles, "
-                "communication style, algorithms, domain knowledge). Does NOT make the "
-                "change — writes a proposal for Claude Code to review during the daily "
-                "audit. Use when the user gives a directive, algorithm, or behavioral "
-                "rule that should become permanent. Do NOT use for facts, preferences, "
-                "decisions, or personal context — those go to save_memory."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "proposed_text": {
-                        "type": "string",
-                        "description": "The exact text to add/change in soul.md",
-                    },
-                    "section": {
-                        "type": "string",
-                        "description": "Which soul.md section this belongs in (e.g. 'How You Think', 'Core Rules', 'How You Communicate')",
-                    },
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Why this change is needed — what problem it solves or what user directive it implements",
-                    },
-                    "source_message": {
-                        "type": "string",
-                        "description": "The user's original message that triggered this proposal",
-                    },
-                },
-                "required": ["proposed_text", "section", "reasoning", "source_message"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_memory",
-            "description": "Read memory.md — the file containing everything the user asked to remember.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "upload_to_drive",
-            "description": "Upload a file to Google Drive (the user LifeOS/fitness/uploads/).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "local_path": {"type": "string"},
-                    "drive_name": {"type": "string", "description": "Filename on Drive (optional)"},
-                },
-                "required": ["local_path"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_drive",
-            "description": (
-                "List files in a Google Drive folder. Use to browse the user's Drive and find "
-                "files (DEXA scans, blood work, photos, etc.). Returns file names, IDs, types, "
-                "and sizes. Use the file ID with download_from_drive to fetch a file."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "folder_id": {
-                        "type": "string",
-                        "description": (
-                            "Google Drive folder ID to list. Omit to list the default "
-                            "fitness/uploads/ folder."
-                        ),
-                    },
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "download_from_drive",
-            "description": (
-                "Download a file from Google Drive to local disk. Use the file ID from "
-                "list_drive. After downloading, use read_pdf to read PDFs with vision. "
-                "Files are cached locally — subsequent reads don't re-download. "
-                "Max file size: 20MB."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_id": {
-                        "type": "string",
-                        "description": "Google Drive file ID (from list_drive results)",
-                    },
-                    "filename": {
-                        "type": "string",
-                        "description": "What to name the file locally (e.g. 'dexa_2026-04-02.pdf')",
-                    },
-                },
-                "required": ["file_id", "filename"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_pdf",
-            "description": (
-                "Read a PDF file using AI vision. Converts PDF pages to images and injects "
-                "them into the conversation so you can see the content. Use this to extract "
-                "data from DEXA scans, blood work, or any PDF. The file must be in the local "
-                "uploads directory — use download_from_drive first if it's on Google Drive. "
-                "Reads 5 pages at a time by default. If you don't find what you need, call "
-                "again with the next page range (e.g. first_page=6). The result tells you "
-                "the total page count so you know how many remain."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "filename": {
-                        "type": "string",
-                        "description": "Filename in the uploads directory (e.g. 'dexa_scan.pdf')",
-                    },
-                    "first_page": {
-                        "type": "integer",
-                        "description": "First page to read (default: 1)",
-                    },
-                    "last_page": {
-                        "type": "integer",
-                        "description": "Last page to read (default: first_page + 4, i.e. 5 pages)",
-                    },
-                },
-                "required": ["filename"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "sync_fitbit",
-            "description": (
-                "Trigger an immediate Fitbit data sync. Pulls latest weight, sleep, steps, "
-                "HRV, nutrition from Fitbit API into Google Sheets. Normally runs 3x/day "
-                "(7am, 12pm, 10pm ET) but this forces an immediate pull."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {},
-            },
-        },
+        "name": "sync_fitbit",
+        "description": "Trigger an immediate Fitbit data sync to SQLite.",
+        "input_schema": {"type": "object", "properties": {}},
     },
 ]
 
 
-# --- Tool implementations ---
+def _execute_tool(name: str, input_data: dict, conn) -> str:
+    """Execute a tool call from the LLM."""
+    if name == "save_memory":
+        path = MEMORY_DIR / "memory.md"
+        entry = input_data["entry"].strip()
+        with open(path, "a") as f:
+            f.write(f"\n- {entry}\n")
+        return "Remembered."
 
-def _run_gog(args: list[str], timeout: int = 30) -> str:
-    """Run a gog CLI command and return output."""
-    cmd = [GOG] + args + ["--account", GOG_ACCOUNT, "--no-input"]
-    log.info("gog: %s", " ".join(cmd))
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, env=GOG_ENV,
-        )
-        if result.returncode != 0:
-            return f"ERROR: {result.stderr.strip() or result.stdout.strip()}"
-        return result.stdout.strip()
-    except subprocess.TimeoutExpired:
-        return "ERROR: gog command timed out after 30s"
+    if name == "propose_soul_change":
+        proposals_path = BASE_DIR / "soul-proposals.jsonl"
+        now = datetime.datetime.now(ET)
+        entry = {
+            "id": now.strftime("%Y%m%d%H%M%S"),
+            "timestamp": now.isoformat(),
+            "status": "pending",
+            "proposed_text": input_data["proposed_text"],
+            "section": input_data["section"],
+            "reasoning": input_data["reasoning"],
+            "source_message": input_data["source_message"],
+        }
+        with open(proposals_path, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        return f"Soul proposal #{entry['id']} filed for review."
+
+    if name == "read_memory":
+        path = MEMORY_DIR / "memory.md"
+        return path.read_text() if path.exists() else "No memories saved yet."
+
+    if name == "query_data":
+        intent = Intent(name=input_data["intent"], fields={
+            k: v for k, v in input_data.items() if k != "intent" and v
+        })
+        return _handle_crud(intent, conn)
+
+    if name == "log_workout":
+        result = log_handlers.log_workout(conn, input_data["exercises"],
+                                          session_type=input_data.get("session_type", "BRO_SPLIT"))
+        return _format_write_confirmation(result)
+
+    if name == "log_weight":
+        result = log_handlers.log_weight(conn, input_data["weight_lbs"],
+                                         source=input_data.get("source", "TELEGRAM"),
+                                         notes=input_data.get("notes", ""))
+        return _format_write_confirmation(result)
+
+    if name == "log_nutrition":
+        result = log_handlers.log_nutrition(conn, input_data["calories"], input_data["protein_g"],
+                                            carbs_g=input_data.get("carbs_g"),
+                                            fat_g=input_data.get("fat_g"))
+        return _format_write_confirmation(result)
+
+    if name == "log_cardio":
+        result = log_handlers.log_cardio(conn, input_data["exercise"], input_data["duration_min"],
+                                         input_data["net_calories"],
+                                         met_used=input_data.get("met_used"),
+                                         notes=input_data.get("notes", ""))
+        return _format_write_confirmation(result)
+
+    if name == "sync_fitbit":
+        return _do_fitbit_sync()
+
+    return f"Unknown tool: {name}"
 
 
-def _today() -> str:
-    return datetime.datetime.now(
-        __import__('zoneinfo').ZoneInfo("America/Toronto")
-    ).strftime("%Y-%m-%d")
+# --- AI conversation (Anthropic SDK) ---
+
+def ask_ai(user_content: str | list, conversation: list[dict], conn) -> tuple[str, list]:
+    """Send to Claude Sonnet for coaching/analysis. Handles tool calls."""
+    conversation.append({"role": "user", "content": user_content})
+    tool_log = []
+    system_prompt = _build_system_prompt()
+
+    # Inject current stats context so the model doesn't need to query for basic stuff
+    stats = query.stats_snapshot(conn)
+    stats_context = (
+        f"\n\n[Current data from SQLite — use this, don't query unless you need something specific]\n"
+        f"{json.dumps(stats, indent=2, default=str)}\n"
+    )
+
+    for _ in range(10):  # max tool rounds
+        try:
+            response = _anthropic_client.messages.create(
+                model=MODEL,
+                max_tokens=4096,
+                system=system_prompt + stats_context,
+                messages=conversation,
+                tools=TOOLS,
+            )
+        except anthropic.RateLimitError:
+            return "API rate limited. Try again in a minute.", tool_log
+        except anthropic.APIError as e:
+            return f"API error: {e}", tool_log
+
+        # Process response
+        text_parts = []
+        tool_uses = []
+        for block in response.content:
+            if block.type == "text":
+                text_parts.append(block.text)
+            elif block.type == "tool_use":
+                tool_uses.append(block)
+
+        # Add assistant message to conversation
+        conversation.append({"role": "assistant", "content": response.content})
+
+        if not tool_uses:
+            return "\n".join(text_parts) or "I'm not sure how to help with that.", tool_log
+
+        # Execute tools and add results
+        tool_results = []
+        for tu in tool_uses:
+            lg.info("Tool call: %s(%s)", tu.name, json.dumps(tu.input)[:200])
+            result = _execute_tool(tu.name, tu.input, conn)
+            lg.info("Tool result: %s", result[:200])
+            tool_log.append({"tool": tu.name, "input": tu.input, "result": result[:500]})
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": tu.id,
+                "content": result,
+            })
+
+        conversation.append({"role": "user", "content": tool_results})
+
+    return "Hit the tool call limit. Try a simpler request.", tool_log
 
 
-def _pdf_to_base64_images(
-    pdf_path: str, first_page: int = 1, last_page: int | None = None
-) -> tuple[list[str], int]:
-    """Convert PDF pages to base64-encoded JPEG images for AI vision."""
+# --- PDF handling ---
+
+def _pdf_to_base64_images(pdf_path: str, first_page: int = 1, last_page: int | None = None):
     from pdf2image import convert_from_path
     from pdf2image.pdf2image import pdfinfo_from_path
     info = pdfinfo_from_path(pdf_path)
@@ -483,481 +642,33 @@ def _pdf_to_base64_images(
     for img in images:
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
-        b64_images.append(base64.b64encode(buf.getvalue()).decode("utf-8"))
+        b64_images.append(base64.b64encode(buf.getvalue()).decode())
     return b64_images, total_pages
 
 
-def _find_next_row(tab: str) -> int | None:
-    """Find the next empty row in column A of a tab. Returns row number (1-based) or None on error.
-    Also logs a warning if blank rows (gaps) exist between data rows."""
-    output = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:A"])
-    if output.startswith("ERROR"):
-        return None
-    lines = output.split("\n")
-    last_occupied = 0
-    gaps = []
-    in_data = False
-    for i, line in enumerate(lines, start=1):
-        if line.strip():
-            if in_data and i > last_occupied + 1:
-                gaps.extend(range(last_occupied + 1, i))
-            last_occupied = i
-            in_data = True
-    if gaps:
-        logging.warning(f"Blank rows detected in {tab} column A at rows: {gaps}. "
-                        "These may cause issues with future writes or reads.")
-    return last_occupied + 1
+# --- Conversation logging ---
+
+def _today() -> str:
+    return datetime.datetime.now(ET).strftime("%Y-%m-%d")
 
 
-def _write_rows_to_sheet(tab: str, cols: str, rows: list[list[str]]) -> str:
-    """Write rows to a specific tab using targeted update (not append). Returns result string."""
-    next_row = _find_next_row(tab)
-    if next_row is None:
-        return "ERROR: could not determine next row in sheet"
-    end_row = next_row + len(rows) - 1
-    range_str = f"{tab}!A{next_row}:{cols}{end_row}"
-    return _run_gog([
-        "sheets", "update", SHEET_ID, range_str,
-        "--values-json", json.dumps(rows), "--input", "RAW",
-    ])
-
-
-def _verify_sheet_write(tab: str, expected_date: str, expected_field: str) -> str:
-    """Read back the sheet and verify the write landed in the correct columns.
-    Tries immediately, retries once after 2s if first attempt fails."""
-    for attempt in range(2):
-        if attempt == 1:
-            time.sleep(2)
-        check = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:B", "-p"])
-        if check.startswith("ERROR"):
-            if attempt == 0:
-                continue
-            return "VERIFY FAILED: could not read sheet back"
-        for line in check.strip().split("\n"):
-            cols = line.split("\t")
-            if len(cols) >= 2 and expected_date in cols[0] and expected_field in cols[1]:
-                return "VERIFIED"
-    return f"VERIFY FAILED: could not find {expected_date} with {expected_field} in columns A-B"
-
-
-def _write_and_verify(tab: str, rows: list[list[str]], expected_field: str, kind: str) -> str:
-    """Write rows to a sheet tab and verify the last row landed correctly.
-    Returns 'VERIFIED' on success, or a user-facing 'WRITE FAILED ...' message
-    on any failure (so callers can return it directly to the model)."""
-    result = _write_rows_to_sheet(tab, "I", rows)
-    if result.startswith("ERROR"):
-        return result
-    verify = _verify_sheet_write(tab, _today(), expected_field)
-    if verify != "VERIFIED":
-        return f"WRITE FAILED for {kind} — {verify}. Data did NOT save correctly. Ask Claude Code to investigate."
-    return "VERIFIED"
-
-
-def tool_log_workout(data: dict) -> str:
-    exercises = data["exercises"]
-    session_type = data.get("session_type", "BRO_SPLIT")
-    date = _today()
-    rows = []
-    total_volume = 0
-    for ex in exercises:
-        volume = ex["sets"] * ex["reps"] * ex["weight_lbs"]
-        total_volume += volume
-        rows.append([
-            date, ex["name"], str(ex["sets"]), str(ex["reps"]),
-            str(ex["weight_lbs"]), str(ex.get("rpe", "")),
-            str(volume), session_type, "TELEGRAM",
-        ])
-    status = _write_and_verify("Training Log", rows, exercises[-1]["name"], f"{len(exercises)} exercises")
-    if status != "VERIFIED":
-        return status
-    return f"Logged {len(exercises)} exercises, total volume: {total_volume:,} lbs. [VERIFIED]"
-
-
-def tool_log_cardio(data: dict) -> str:
-    date = _today()
-    rows = [[
-        date, data["exercise"], str(data["duration_min"]),
-        str(data.get("speed", "")), str(data.get("incline", "")),
-        str(data["net_calories"]), str(data["met_used"]),
-        "TELEGRAM", data.get("notes", ""),
-    ]]
-    status = _write_and_verify("Cardio", rows, data["exercise"], "cardio")
-    if status != "VERIFIED":
-        return status
-    return f"Logged cardio: {data['exercise']} {data['duration_min']}min, {data['net_calories']} net cal (MET {data['met_used']}). [VERIFIED]"
-
-
-def tool_log_weight(data: dict) -> str:
-    date = _today()
-    lbs = data["weight_lbs"]
-    kg = round(lbs / 2.20462, 1)
-    bf = str(data.get("body_fat_pct", ""))
-    source = data.get("data_source", "RENPHO")
-    notes = data.get("notes", "")
-    rows = [[date, str(lbs), str(kg), bf, "", "", "", source, notes]]
-    status = _write_and_verify("Body Metrics", rows, str(lbs), "weight")
-    if status != "VERIFIED":
-        return status
-    return f"Logged weight: {lbs} lbs ({kg} kg) on {date}. [VERIFIED]"
-
-
-def tool_log_nutrition(data: dict) -> str:
-    date = _today()
-    rows = [[
-        date, str(data["calories"]), str(data["protein_g"]),
-        str(data.get("carbs_g", "")), str(data.get("fat_g", "")),
-        str(data.get("fiber_g", "")), str(data.get("sodium_mg", "")),
-        data.get("data_source", "MFP"), data.get("notes", ""),
-    ]]
-    status = _write_and_verify("Nutrition", rows, str(data["calories"]), "nutrition")
-    if status != "VERIFIED":
-        return status
-    return f"Logged nutrition for {date}: {data['calories']} cal, {data['protein_g']}g protein. [VERIFIED]"
-
-
-def tool_read_sheet(data: dict) -> str:
-    tab = data["tab"]
-    num_rows = data.get("rows", 10)
-    output = _run_gog(["sheets", "get", SHEET_ID, f"{tab}!A:Z"])
-    if output.startswith("ERROR"):
-        return output
-    lines = output.strip().split("\n")
-    header = lines[0] if lines else ""
-    numbered = []
-    for i, line in enumerate(lines[1:], start=2):
-        if line.strip() and not line.startswith("←") and len(line) > 4 and line[0:4].isdigit():
-            numbered.append((i, line))
-    numbered.sort(key=lambda x: x[1], reverse=True)
-    recent = numbered[:num_rows]
-    result_lines = [f"Row 1: {header}"]
-    for row_num, line in recent:
-        result_lines.append(f"Row {row_num}: {line}")
-    return "\n".join(result_lines)
-
-
-def tool_write_sheet(data: dict) -> str:
-    range_str = data["range"]
-    values = data["values"]
-    reason = data["reason"]
-    result = _run_gog([
-        "sheets", "update", SHEET_ID, range_str,
-        "--values-json", json.dumps(values), "--input", "RAW",
-    ])
-    if result.startswith("ERROR"):
-        return result
-    tab = range_str.split("!")[0] if "!" in range_str else range_str
-    check = _run_gog(["sheets", "get", SHEET_ID, range_str])
-    if check.startswith("ERROR"):
-        return f"Write sent but verify failed: {check}"
-    written_val = values[0][0] if values and values[0] else ""
-    if written_val in check:
-        return f"Written to {range_str} [VERIFIED]. Reason: {reason}"
-    return f"Write sent to {range_str} but could not verify value in read-back. Reason: {reason}"
-
-
-def tool_clear_row(data: dict) -> str:
-    range_str = data["range"]
-    reason = data["reason"]
-    result = _run_gog(["sheets", "clear", SHEET_ID, range_str, "--no-input"])
-    if result.startswith("ERROR"):
-        return result
-    check = _run_gog(["sheets", "get", SHEET_ID, range_str])
-    if check.startswith("ERROR") or check.strip() == "" or all(c in (' ', '\t', '\n') for c in check):
-        return f"Cleared {range_str}. Reason: {reason} [VERIFIED]"
-    return f"Clear sent to {range_str} but cells may not be empty. Read-back: {check[:200]}. Reason: {reason}"
-
-
-def tool_save_memory(data: dict) -> str:
-    path = MEMORY_DIR / "memory.md"
-    entry = data["entry"].replace("\\n", "\n").strip()
-    with open(path, "a") as f:
-        f.write(f"\n- {entry}\n")
-    content = path.read_text()
-    if entry in content:
-        return "Remembered [VERIFIED]"
-    return "Save failed [VERIFY FAILED]"
-
-
-def tool_propose_soul_change(data: dict) -> str:
-    proposals_path = BASE_DIR / "soul-proposals.jsonl"
-    from zoneinfo import ZoneInfo
-    now = datetime.datetime.now(ZoneInfo("America/Toronto"))
+def log_conversation(user_text: str, reply: str, tool_calls: list | None = None):
+    today = _today()
+    log_file = LOG_DIR / f"{today}.jsonl"
     entry = {
-        "id": now.strftime("%Y%m%d%H%M%S"),
-        "timestamp": now.isoformat(),
-        "status": "pending",
-        "proposed_text": data["proposed_text"],
-        "section": data["section"],
-        "reasoning": data["reasoning"],
-        "source_message": data["source_message"],
+        "ts": datetime.datetime.now(ET).isoformat(),
+        "model": MODEL,
+        "user": user_text,
+        "assistant": reply,
     }
-    with open(proposals_path, "a") as f:
+    if tool_calls:
+        entry["tools"] = tool_calls
+    with open(log_file, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    content = proposals_path.read_text()
-    if entry["id"] in content:
-        return f"Soul proposal #{entry['id']} filed for review. It will be reviewed by Claude Code and sent to you for APPROVE/REJECT. [VERIFIED]"
-    return "Proposal save failed [VERIFY FAILED]"
-
-
-def tool_read_memory(data: dict) -> str:
-    path = MEMORY_DIR / "memory.md"
-    if not path.exists():
-        return "No memories saved yet."
-    return path.read_text()
-
-
-def tool_upload_to_drive(data: dict) -> str:
-    local_path = data["local_path"]
-    drive_name = data.get("drive_name", pathlib.Path(local_path).name)
-    return _run_gog(["drive", "upload", local_path, "--parent", DRIVE_UPLOADS_FOLDER, "--name", drive_name])
-
-
-def tool_list_drive(data: dict) -> str:
-    folder_id = data.get("folder_id", DRIVE_UPLOADS_FOLDER)
-    return _run_gog(["drive", "ls", "--parent", folder_id])
-
-
-def tool_download_from_drive(data: dict) -> str:
-    file_id = data["file_id"]
-    filename = data["filename"]
-    local_path = UPLOAD_DIR / filename
-    if local_path.exists():
-        return f"File already cached locally: {local_path}"
-    result = _run_gog(["drive", "download", file_id, "--output", str(local_path)], timeout=60)
-    if result.startswith("ERROR"):
-        return result
-    if local_path.exists() and local_path.stat().st_size > 20 * 1024 * 1024:
-        local_path.unlink()
-        return "ERROR: File exceeds 20MB limit. Download removed."
-    return f"Downloaded to {local_path} ({local_path.stat().st_size // 1024} KB)"
-
-
-def tool_read_pdf(data: dict, conversation: list[dict] | None = None) -> str:
-    filename = data["filename"]
-    first_page = data.get("first_page", 1)
-    last_page = data.get("last_page", first_page + 4)
-    pdf_path = UPLOAD_DIR / filename
-    if not pdf_path.exists():
-        for f in UPLOAD_DIR.iterdir():
-            if f.name.lower() == filename.lower():
-                pdf_path = f
-                break
-        else:
-            return f"ERROR: File not found: {filename}. Available: {', '.join(f.name for f in UPLOAD_DIR.iterdir() if f.suffix.lower() == '.pdf')}"
-    try:
-        b64_images, total_pages = _pdf_to_base64_images(str(pdf_path), first_page=first_page, last_page=last_page)
-        pages_read = len(b64_images)
-        range_desc = f"pages {first_page}-{first_page + pages_read - 1} of {total_pages}"
-        if conversation is not None:
-            content_parts = [{"type": "text", "text": f"[PDF content from {filename} — {range_desc}:]"}]
-            for b64 in b64_images:
-                content_parts.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-            conversation.append({"role": "user", "content": content_parts})
-        log.info("PDF read: %s (%s, %d images)", filename, range_desc, pages_read)
-        return f"PDF loaded: {filename} ({range_desc}). The pages are now visible to you as images above."
-    except Exception as e:
-        return f"ERROR reading PDF: {e}"
-
-
-def tool_sync_fitbit(data: dict) -> str:
-    try:
-        result = subprocess.run(
-            ["python3", "/home/openclaw/fitbit_sync.py"],
-            capture_output=True, text=True, timeout=60,
-            env={**os.environ, "HOME": "/home/openclaw"},
-        )
-        if result.returncode != 0:
-            return f"ERROR: {result.stderr.strip()[:500]}"
-        return f"Fitbit sync completed. {result.stdout.strip()[-200:]}"
-    except subprocess.TimeoutExpired:
-        return "Fitbit sync timed out after 60s. Data may be partially updated."
-
-
-TOOL_DISPATCH = {
-    "log_workout": tool_log_workout,
-    "log_cardio": tool_log_cardio,
-    "log_weight": tool_log_weight,
-    "log_nutrition": tool_log_nutrition,
-    "read_sheet": tool_read_sheet,
-    "write_sheet": tool_write_sheet,
-    "clear_row": tool_clear_row,
-    "save_memory": tool_save_memory,
-    "propose_soul_change": tool_propose_soul_change,
-    "read_memory": tool_read_memory,
-    "upload_to_drive": tool_upload_to_drive,
-    "list_drive": tool_list_drive,
-    "download_from_drive": tool_download_from_drive,
-    "read_pdf": tool_read_pdf,
-    "sync_fitbit": tool_sync_fitbit,
-}
-
-TOOLS_WITH_CONVERSATION = {"read_pdf"}
-
-
-# --- Monitoring (passive — flags issues, never intervenes) ---
-
-def _append_failure_notice(reply: str, tools_used: list[dict]) -> str:
-    """If any tool failed and the bot didn't mention it, append a notice."""
-    failed = [t for t in tools_used if "TOOL FAILED" in t.get("result", "") or "ERROR" in t.get("result", "") or "VERIFY FAILED" in t.get("result", "")]
-    if not failed:
-        return reply
-    failure_keywords = ("fail", "error", "could not", "unable", "didn't work", "permission denied")
-    if not any(kw in reply.lower() for kw in failure_keywords):
-        notice = "\n\n⚠️ " + " | ".join(f"{t['tool']} failed" for t in failed) + " — action(s) did NOT complete."
-        return reply + notice
-    return reply
-
-
-WRITE_TOOLS = {"write_sheet", "clear_row", "log_workout", "log_cardio", "log_weight", "log_nutrition", "save_memory", "propose_soul_change"}
-
-
-def _append_write_hallucination_notice(reply: str, tools_used: list[dict]) -> str:
-    """If the bot claims it wrote/updated data but made no write tool calls, append warning.
-
-    Only flags *present/future-tense* write claims. Past-tense references to earlier verified
-    writes (e.g. "PR logged", "already updated") are not flagged — the bot is allowed to
-    describe what it did previously.
-    """
-    # Only match present/future intent to write — not past-tense summaries
-    action_phrases = (
-        r"i(?:'ve| have) (?:just |now )(?:updated|fixed|corrected|logged|written|cleared|deleted|removed|saved|added|appended)",
-        r"let me (?:correct|fix|update|delete|remove|clear|log|save|add)",
-        r"i (?:will|shall) (?:now )?(?:correct|fix|update|delete|remove|clear|log|save|add)",
-    )
-    reply_lower = reply.lower()
-    claimed = any(re.search(p, reply_lower) for p in action_phrases)
-    if not claimed:
-        return reply
-    used_write_tool = any(t.get("tool") in WRITE_TOOLS for t in tools_used)
-    if used_write_tool:
-        return reply
-    return reply + "\n\n⚠️ _I claimed to make changes but didn't call a write tool. The data was NOT changed. Tell me to actually do it._"
-
-
-# --- Response formatting ---
-
-def _clean_content(reply: str) -> str:
-    """Minimal cleanup — only things the model can't control."""
-    # Strip emoji prefixes (system adds them after, model shouldn't add its own)
-    reply = re.sub(r'^(?:🤖🔬|🤖|🔬)\s*\n?', '', reply).lstrip()
-    _name_pat = re.escape(AGENT_NAME)
-    reply = re.sub(rf'^{_name_pat}\s*>?\s*\n?', '', reply, flags=re.IGNORECASE).lstrip()
-    return reply
-
-
-def _escape_markdownv2(reply: str) -> str:
-    """Escape special chars for Telegram MarkdownV2."""
-    return re.sub(r'([.!()\-=+{}\[\]|~>#])', r'\\\1', reply)
-
-
-# --- AI conversation loop ---
-
-client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
-
-
-def execute_tool(name: str, input_data: dict, conversation: list[dict] | None = None) -> str:
-    fn = TOOL_DISPATCH.get(name)
-    if not fn:
-        return f"Unknown tool: {name}"
-    try:
-        if name in TOOLS_WITH_CONVERSATION:
-            return fn(input_data, conversation=conversation)
-        return fn(input_data)
-    except Exception as e:
-        log.exception("Tool %s failed", name)
-        return f"⚠️ TOOL FAILED — {name}: {e}"
-
-
-def _api_call_with_retry(system_prompt: str, conversation: list[dict]) -> object:
-    """Make API call with retry on 429 rate limits."""
-    backoff = [30, 60, 120]
-    for attempt in range(len(backoff) + 1):
-        try:
-            return client.chat.completions.create(
-                model=MODEL,
-                max_tokens=4096,
-                messages=[{"role": "system", "content": system_prompt}] + conversation,
-                tools=TOOLS,
-            )
-        except Exception as e:
-            if "429" in str(e) and attempt < len(backoff):
-                wait = backoff[attempt]
-                log.warning("Rate limited (429), retrying in %ds (attempt %d/%d)", wait, attempt + 1, len(backoff))
-                time.sleep(wait)
-            else:
-                raise
-
-
-def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, list]:
-    """Send user message to AI, handle tool calls, return (reply, tool_log)."""
-    conversation.append({"role": "user", "content": user_content})
-    tool_log = []
-    system_prompt = _build_system_prompt()
-
-    for _ in range(MAX_TOOL_ROUNDS):
-        response = _api_call_with_retry(system_prompt, conversation)
-
-        msg = response.choices[0].message
-        assistant_msg = {"role": "assistant", "content": msg.content or ""}
-        if msg.tool_calls:
-            assistant_msg["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                }
-                for tc in msg.tool_calls
-            ]
-        conversation.append(assistant_msg)
-
-        if not msg.tool_calls:
-            # Retry once on empty response
-            if not (msg.content or "").strip():
-                log.warning("Empty response from model, retrying once")
-                conversation.pop()  # remove the empty assistant message
-                response = _api_call_with_retry(system_prompt, conversation)
-                msg = response.choices[0].message
-                if not (msg.content or "").strip() and not msg.tool_calls:
-                    return "I drew a blank on that one. Could you try again?", tool_log
-                if not msg.tool_calls:
-                    return msg.content or "", tool_log
-                # If retry produced tool calls, fall through to tool handling
-                assistant_msg = {"role": "assistant", "content": msg.content or ""}
-                assistant_msg["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                    }
-                    for tc in msg.tool_calls
-                ]
-                conversation.append(assistant_msg)
-            else:
-                return msg.content or "", tool_log
-
-        for tc in msg.tool_calls:
-            fn_name = tc.function.name
-            fn_args = json.loads(tc.function.arguments)
-            log.info("Tool call: %s(%s)", fn_name, json.dumps(fn_args)[:200])
-            result = execute_tool(fn_name, fn_args, conversation=conversation)
-            log.info("Tool result: %s", result[:200])
-            tool_log.append({"tool": fn_name, "input": fn_args, "result": result[:500]})
-            conversation.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": result,
-            })
-
-    return "I hit the tool call limit. Please try a simpler request.", tool_log
-
-
-# --- Conversation state and logging ---
-
-conversations: dict[int, list] = {}
 
 
 def load_conversation_from_logs() -> list[dict]:
-    """Reload today's conversation from log, including tool call history."""
+    """Reload today's conversation from log."""
     today = _today()
     log_file = LOG_DIR / f"{today}.jsonl"
     conv = []
@@ -970,114 +681,103 @@ def load_conversation_from_logs() -> list[dict]:
             entry = json.loads(line)
             user_msg = entry.get("user", "")
             assistant_msg = entry.get("assistant", "")
-            tools = entry.get("tools", [])
-            if assistant_msg:
-                # Strip emoji/name prefixes from history
-                assistant_msg = re.sub(r'^[🤖🔬\s]+\n?', '', assistant_msg).lstrip()
-                _name_pat = re.escape(AGENT_NAME)
-                assistant_msg = re.sub(rf'^{_name_pat}\s*>\s*\n?', '', assistant_msg, flags=re.IGNORECASE).lstrip()
             if user_msg:
                 conv.append({"role": "user", "content": user_msg})
-            if tools:
-                # Rebuild tool calls as a summary the model can reason about
-                tool_summary = "\n".join(
-                    f"[Tool: {t['tool']}({json.dumps(t.get('input', {}))}) → {t.get('result', 'no result')}]"
-                    for t in tools
-                )
-                conv.append({"role": "assistant", "content": f"{tool_summary}\n\n{assistant_msg}"})
-            elif assistant_msg:
+            if assistant_msg:
+                # Strip emoji prefix from history
+                assistant_msg = re.sub(r'^[\U0001f916\U0001f52c\s]+\n?', '', assistant_msg).lstrip()
                 conv.append({"role": "assistant", "content": assistant_msg})
     except Exception as e:
-        log.warning("Failed to load conversation history: %s", e)
+        lg.warning("Failed to load conversation history: %s", e)
     if len(conv) > MAX_CONVERSATION_MESSAGES:
         conv = conv[-MAX_CONVERSATION_MESSAGES:]
-    if conv:
-        conv.insert(0, {
-            "role": "system",
-            "content": (
-                "[Conversation reloaded from earlier today. "
-                "Numbers in old messages (calories, weight, sleep, etc.) may be stale. "
-                "Always call read_sheet or sync_fitbit for current data before reporting stats.]"
-            ),
-        })
-    log.info("Loaded %d messages from today's log (capped from full day)", len(conv))
     return conv
 
 
-def log_conversation(user_text: str, reply: str, tool_calls: list | None = None):
-    today = _today()
-    log_file = LOG_DIR / f"{today}.jsonl"
-    entry = {
-        "ts": datetime.datetime.now().isoformat(),
-        "model": MODEL,
-        "user": user_text,
-        "assistant": reply,
-    }
-    if tool_calls:
-        entry["tools"] = tool_calls
-    with open(log_file, "a") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+# --- Response formatting ---
 
-
-async def _send_reply(update, user_text: str, reply: str, tools_used: list):
-    """Shared send logic: monitoring → log → escape → send."""
-    reply = _append_failure_notice(reply, tools_used)
-    reply = _append_write_hallucination_notice(reply, tools_used)
-    log_conversation(user_text, reply, tools_used)
-    reply = _escape_markdownv2(reply)
-    for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i : i + 4096], parse_mode="MarkdownV2")
+def _clean_content(reply: str) -> str:
+    reply = re.sub(r'^[\U0001f916\U0001f52c\s]*\n?', '', reply).lstrip()
+    _name_pat = re.escape(AGENT_NAME)
+    reply = re.sub(rf'^{_name_pat}\s*>?\s*\n?', '', reply, flags=re.IGNORECASE).lstrip()
+    return reply
 
 
 # --- Telegram handlers ---
+
+conversations: dict[int, list] = {}
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat:
         return
     if update.effective_chat.id != CHAT_ID:
-        log.warning("Ignoring message from chat %s", update.effective_chat.id)
         return
 
     user_text = update.message.text
     if not user_text:
         return
 
-    log.info("Message from the user: %s", user_text[:100])
+    lg.info("Message: %s", user_text[:100])
 
-    cid = update.effective_chat.id
-    conv = conversations.get(cid)
-    if conv is None:
-        conv = load_conversation_from_logs()
-        conversations[cid] = conv
-
-    if len(conv) > MAX_CONVERSATION_MESSAGES:
-        conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
-
-    tools_used = []
+    conn = query.connect(DB_PATH)
     try:
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
-    except Exception as e:
-        log.exception("AI API error")
-        if "429" in str(e):
-            reply = "API credits are exhausted — retries didn't help. Try again later or check the xAI billing dashboard."
+        # Step 1: Try deterministic routing
+        intent = route(user_text)
+        source = "router"
+
+        if intent:
+            # CRUD — no LLM call needed
+            reply = _handle_crud(intent, conn)
+            tools_used = []
         else:
-            reply = f"Something went wrong: {e}"
+            # Step 2: Try LLM classifier
+            try:
+                classified = classify(user_text)
+                if classified and classified.get("intent") != "unknown" and classified.get("confidence") != "low":
+                    intent = Intent(name=classified["intent"], fields=classified.get("fields", {}))
+                    reply = _handle_crud(intent, conn)
+                    tools_used = []
+                    source = "llm_classifier"
+                else:
+                    # Step 3: Full coaching conversation with Claude Sonnet
+                    source = "llm_coaching"
+                    cid = update.effective_chat.id
+                    conv = conversations.get(cid)
+                    if conv is None:
+                        conv = load_conversation_from_logs()
+                        conversations[cid] = conv
+                    if len(conv) > MAX_CONVERSATION_MESSAGES:
+                        conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
+                    reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv, conn)
+            except Exception as e:
+                lg.exception("Classification/coaching error")
+                reply = f"Something went wrong: {e}"
+                tools_used = []
+
+    finally:
+        conn.close()
 
     reply = _clean_content(reply)
     reply = AGENT_EMOJI + "\n" + reply
 
-    await _send_reply(update, user_text, reply, tools_used)
+    log_conversation(user_text, reply, tools_used if tools_used else None)
+
+    # Send to Telegram
+    for i in range(0, len(reply), 4096):
+        try:
+            await update.message.reply_text(reply[i:i+4096])
+        except Exception as e:
+            lg.error("Telegram send failed: %s", e)
 
 
 async def handle_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Reset conversation history."""
     if update.effective_chat and update.effective_chat.id == CHAT_ID:
         conversations.pop(CHAT_ID, None)
         await update.message.reply_text("Conversation cleared.")
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle file uploads — PDFs get vision treatment."""
     if not update.message or not update.effective_chat:
         return
     if update.effective_chat.id != CHAT_ID:
@@ -1091,48 +791,58 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     filename = doc.file_name or f"upload_{_today()}"
     local_path = UPLOAD_DIR / filename
     await file.download_to_drive(str(local_path))
-    log.info("Downloaded file: %s", local_path)
+    lg.info("Downloaded: %s", local_path)
 
     caption = update.message.caption or ""
+    conn = query.connect(DB_PATH)
 
-    if filename.lower().endswith(".pdf"):
-        try:
-            b64_images, total_pages = _pdf_to_base64_images(str(local_path), first_page=1, last_page=5)
-            remaining = total_pages - len(b64_images)
-            remaining_note = f" ({remaining} more pages — use read_pdf to continue)" if remaining > 0 else ""
-            content_parts = [
-                {"type": "text", "text": f"[PDF uploaded: {filename} — pages 1-{len(b64_images)} of {total_pages}{remaining_note}] {caption}".strip()},
-            ]
-            for b64 in b64_images:
-                content_parts.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-            user_content = content_parts
-        except Exception as e:
-            log.exception("PDF conversion failed")
-            user_content = f"[File uploaded: {filename} (PDF conversion failed: {e})] {caption}".strip()
-    else:
-        user_content = f"[File uploaded: {filename} saved to {local_path}] {caption}".strip()
-
-    user_text_for_log = f"[File uploaded: {filename}] {caption}".strip()
-
-    conv = conversations.setdefault(CHAT_ID, [])
-    if len(conv) > MAX_CONVERSATION_MESSAGES:
-        conv[:] = conv[-MAX_CONVERSATION_MESSAGES:]
-
-    tools_used = []
     try:
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_content, conv)
-    except Exception as e:
-        log.exception("AI API error")
-        reply = f"Something went wrong: {e}"
+        if filename.lower().endswith(".pdf"):
+            # Check if it's a DEXA scan
+            is_dexa = "dexa" in filename.lower() or "dexa" in caption.lower()
+            if is_dexa:
+                from handlers.dexa import extract_dexa_from_pdf
+                # Extract date from filename or use today
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                scan_date = date_match.group(1) if date_match else _today()
+                result = extract_dexa_from_pdf(str(local_path), conn, scan_date)
+                if "error" in result:
+                    reply = f"DEXA extraction failed: {result['error']}"
+                else:
+                    reply = f"DEXA scan processed ({scan_date}): {result.get('extracted', {}).get('total_bf_pct', '?')}% BF"
+                tools_used = [{"tool": "extract_dexa", "input": {"file": filename}, "result": str(result)[:500]}]
+            else:
+                # Generic PDF — send to LLM with vision
+                try:
+                    b64_images, total_pages = _pdf_to_base64_images(str(local_path), first_page=1, last_page=5)
+                    content = [
+                        {"type": "text", "text": f"[PDF uploaded: {filename}] {caption}".strip()},
+                    ]
+                    for b64 in b64_images:
+                        content.append({
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                        })
+                    conv = conversations.setdefault(CHAT_ID, [])
+                    reply, tools_used = await asyncio.to_thread(ask_ai, content, conv, conn)
+                except Exception as e:
+                    reply = f"PDF processing failed: {e}"
+                    tools_used = []
+        else:
+            reply = f"File saved: {filename}"
+            tools_used = []
+    finally:
+        conn.close()
 
     reply = _clean_content(reply)
     reply = AGENT_EMOJI + "\n" + reply
+    log_conversation(f"[File: {filename}] {caption}", reply, tools_used if tools_used else None)
 
-    await _send_reply(update, user_text_for_log, reply, tools_used)
+    for i in range(0, len(reply), 4096):
+        await update.message.reply_text(reply[i:i+4096])
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle photo uploads."""
     if not update.message or not update.effective_chat:
         return
     if update.effective_chat.id != CHAT_ID:
@@ -1143,26 +853,35 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     filename = f"photo_{_today()}_{photo.file_unique_id}.jpg"
     local_path = UPLOAD_DIR / filename
     await file.download_to_drive(str(local_path))
-    log.info("Downloaded photo: %s", local_path)
 
     caption = update.message.caption or ""
-    user_text = f"[Photo uploaded: {filename}] {caption}".strip()
 
-    conv = conversations.setdefault(CHAT_ID, [])
-    tools_used = []
+    # Send photo to LLM with vision
+    with open(local_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+
+    content = [
+        {"type": "text", "text": f"[Photo uploaded: {filename}] {caption}".strip()},
+        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+    ]
+
+    conn = query.connect(DB_PATH)
     try:
-        reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
-    except Exception as e:
-        reply = f"Something went wrong: {e}"
+        conv = conversations.setdefault(CHAT_ID, [])
+        reply, tools_used = await asyncio.to_thread(ask_ai, content, conv, conn)
+    finally:
+        conn.close()
 
     reply = _clean_content(reply)
     reply = AGENT_EMOJI + "\n" + reply
+    log_conversation(f"[Photo: {filename}] {caption}", reply, tools_used if tools_used else None)
 
-    await _send_reply(update, user_text, reply, tools_used)
+    for i in range(0, len(reply), 4096):
+        await update.message.reply_text(reply[i:i+4096])
 
 
 def main():
-    log.info("Starting LifeOS bot (model: %s)", MODEL)
+    lg.info("Starting LifeOS bot v2 (model: %s)", MODEL)
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -1173,7 +892,7 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    log.info("Bot is polling...")
+    lg.info("Bot is polling...")
     app.run_polling(drop_pending_updates=True)
 
 

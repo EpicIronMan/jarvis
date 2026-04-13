@@ -17,9 +17,10 @@ model writes coaching prose, parses DEXA scans, and handles on-demand analysis.
 | Phase | Goal | Status |
 |-------|------|--------|
 | 0 | SQLite schema + one-shot sheet importer + verified row parity | **done 2026-04-11** |
-| 1 | Deterministic router + read path on SQLite (bot still writes to sheets) | pending |
+| 1 | Deterministic router + query handlers + read-path CLI | **done 2026-04-11** |
+| 1.5 | Expand coverage + LLM fallback + bug fixes + tests | **done 2026-04-12** |
 | 2 | Write path on SQLite + one-way DB→read-only-sheet export | pending |
-| 3 | Cleanup (delete gog, .openclaw, auth-heartbeat, vendored/) + Claude Sonnet model swap + tests/ | pending |
+| 3 | Cleanup (delete gog, .openclaw, auth-heartbeat, vendored/) + Claude Sonnet model swap | pending |
 | 4 | Trim qa-check.sh + harden based on real v2 event log | pending |
 
 v2 is fully reversible until Phase 2 begins. `rm -rf v2/` undoes everything
@@ -36,6 +37,17 @@ through Phase 1.
   (skips header + comment rows). Re-runnable (drops and recreates lifeos.db).
 - `lifeos.db` — the SQLite file. **Gitignored** (binary). Backups and a
   daily `.dump` will live alongside it once Phase 2 ships.
+- `handlers/dates.py` — deterministic date resolution in America/Toronto.
+  Parses "today", "yesterday", "N days ago", weekday names, ISO strings,
+  and range tokens ("last 7 days", "this week", "this month").
+- `handlers/query.py` — SELECT helpers per table. Structured-dict returns.
+  Null-aware averages for range summaries. Fuzzy exercise matching.
+- `handlers/classify.py` — LLM fallback classifier. Router misses go to
+  Claude Haiku with a strict JSON contract. Hallucinated intents rejected.
+- `router.py` — deterministic intent regex matcher. 16 intents, ~35 patterns.
+- `lifeos_cli.py` — read-path harness (router → handler → JSON output).
+  Supports `--no-llm` for router-only mode.
+- `tests/` — 124 pytest tests. Router, dates, query helpers, bug regressions.
 - `README.md` — this file.
 
 ## How to re-run the importer (Phase 0 only)

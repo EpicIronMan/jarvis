@@ -35,7 +35,7 @@ DB_PATH = V2_DIR / "lifeos.db"
 sys.path.insert(0, str(V2_DIR))
 
 from router import route, Intent, list_intents  # noqa: E402
-from handlers import dates, query  # noqa: E402
+from handlers import dates, query, log as log_handlers  # noqa: E402
 
 
 def handle(intent: Intent, conn: sqlite3.Connection) -> dict:
@@ -107,6 +107,30 @@ def handle(intent: Intent, conn: sqlite3.Connection) -> dict:
         if not ex:
             return {"intent": name, "error": "no exercise extracted"}
         return {"intent": name, "exercise": ex, "result": query.last_session_of_exercise(conn, ex)}
+
+    # --- write intents ---
+    if name == "log_weight":
+        result = log_handlers.log_weight(conn, f["weight_lbs"], source=f.get("source", "TELEGRAM"))
+        return {"intent": name, "result": result}
+
+    if name == "log_workout_shorthand":
+        result = log_handlers.log_workout(conn, f["exercises"])
+        return {"intent": name, "result": result}
+
+    if name == "log_nutrition_shorthand":
+        result = log_handlers.log_nutrition(conn, f["calories"], f["protein_g"])
+        return {"intent": name, "result": result}
+
+    if name == "rename_exercise":
+        result = log_handlers.rename_exercise(conn, f["old_name"], f["new_name"])
+        return {"intent": name, "result": result}
+
+    if name == "edit_weight":
+        result = log_handlers.edit_weight(conn, f["date"], f["weight_lbs"])
+        return {"intent": name, "result": result}
+
+    if name == "sync_fitbit":
+        return {"intent": name, "result": {"note": "fitbit sync triggered (use ingest_fitbit.py)"}}
 
     return {"intent": name, "error": "no handler implemented"}
 

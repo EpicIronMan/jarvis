@@ -1,0 +1,266 @@
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE schema_version (
+    version       INTEGER PRIMARY KEY,
+    applied_at    TEXT    NOT NULL,
+    description   TEXT    NOT NULL
+) STRICT;
+INSERT INTO schema_version VALUES(1,'2026-04-11','Phase 0 initial schema');
+CREATE TABLE body_metrics (
+    date            TEXT    PRIMARY KEY,              -- YYYY-MM-DD
+    weight_lbs      REAL,
+    weight_kg       REAL,
+    body_fat_pct    REAL,                              -- Renpho bioimpedance, NOT DEXA truth
+    muscle_mass_kg  REAL,                              -- nullable: Fitbit doesn't always return
+    water_pct       REAL,                              -- nullable
+    bmi             REAL,
+    source          TEXT    NOT NULL,                  -- FITBIT | TELEGRAM | RENPHO | MANUAL
+    notes           TEXT
+) STRICT;
+INSERT INTO body_metrics VALUES('2026-03-08',184.099999999999994,83.5,NULL,NULL,NULL,28.2600000000000015,'FITBIT','synced 19:39 ET');
+INSERT INTO body_metrics VALUES('2026-03-09',183.599999999999994,83.2999999999999971,NULL,NULL,NULL,28.1700000000000017,'FITBIT','synced 19:39 ET');
+INSERT INTO body_metrics VALUES('2026-03-10',183.400000000000005,83.2000000000000028,NULL,NULL,NULL,28.1400000000000005,'FITBIT','synced 19:39 ET');
+INSERT INTO body_metrics VALUES('2026-03-11',182.300000000000011,82.7000000000000028,NULL,NULL,NULL,27.9800000000000004,'FITBIT','synced 19:39 ET');
+INSERT INTO body_metrics VALUES('2026-03-12',181.0,82.0999999999999943,NULL,NULL,NULL,27.7699999999999995,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-13',180.099999999999994,81.7000000000000028,NULL,NULL,NULL,27.629999999999999,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-14',179.0,81.2000000000000028,NULL,NULL,NULL,27.4600000000000008,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-15',178.800000000000011,81.0999999999999943,NULL,NULL,NULL,27.4299999999999997,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-16',179.900000000000005,81.5999999999999943,22.8000000000000007,NULL,NULL,27.5799999999999982,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-17',176.800000000000011,80.2000000000000028,22.1000000000000014,NULL,NULL,27.129999999999999,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-18',176.800000000000011,80.2000000000000028,22.1000000000000014,NULL,NULL,27.1099999999999994,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-19',177.300000000000011,80.4000000000000056,22.1999999999999992,NULL,NULL,27.1799999999999997,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-20',176.099999999999994,79.9000000000000056,22.0,NULL,NULL,27.0199999999999995,'FITBIT','synced 19:40 ET');
+INSERT INTO body_metrics VALUES('2026-03-25',179.900000000000005,81.5999999999999943,22.8000000000000007,NULL,NULL,27.5799999999999982,'FITBIT','synced 19:41 ET');
+INSERT INTO body_metrics VALUES('2026-03-27',177.900000000000005,80.7000000000000028,22.3000000000000007,NULL,NULL,27.2800000000000011,'FITBIT','synced 19:41 ET');
+INSERT INTO body_metrics VALUES('2026-03-28',178.599999999999994,81.0,22.5,NULL,NULL,27.3999999999999985,'FITBIT','synced 19:41 ET');
+INSERT INTO body_metrics VALUES('2026-03-29',177.300000000000011,80.4000000000000056,22.1999999999999992,NULL,NULL,27.1900000000000012,'FITBIT','synced 19:41 ET');
+INSERT INTO body_metrics VALUES('2026-03-30',176.400000000000005,80.0,22.0,NULL,NULL,27.0399999999999991,'FITBIT','synced 19:41 ET');
+INSERT INTO body_metrics VALUES('2026-03-31',175.699999999999988,79.7000000000000028,21.8000000000000007,NULL,NULL,26.9600000000000008,'FITBIT','synced 19:41 ET');
+INSERT INTO body_metrics VALUES('2026-04-01',174.199999999999988,79.0,21.5,NULL,NULL,26.6999999999999992,'FITBIT','synced 19:42 ET');
+INSERT INTO body_metrics VALUES('2026-04-02',174.800000000000011,79.2999999999999971,21.6000000000000014,NULL,NULL,26.8200000000000002,'FITBIT','synced 19:42 ET');
+INSERT INTO body_metrics VALUES('2026-04-03',177.699999999999988,80.5999999999999943,22.3000000000000007,NULL,NULL,27.2600000000000015,'FITBIT','synced 19:42 ET');
+INSERT INTO body_metrics VALUES('2026-04-04',177.699999999999988,80.5999999999999943,22.3000000000000007,NULL,NULL,27.2600000000000015,'FITBIT',NULL);
+INSERT INTO body_metrics VALUES('2026-04-05',175.300000000000011,79.5,21.8000000000000007,NULL,NULL,26.8900000000000005,'FITBIT','synced 20:13 ET');
+INSERT INTO body_metrics VALUES('2026-04-06',174.199999999999988,79.0,21.5,NULL,NULL,26.7199999999999988,'FITBIT','synced 22:33 ET');
+INSERT INTO body_metrics VALUES('2026-04-07',173.300000000000011,78.5999999999999943,21.3000000000000007,NULL,NULL,26.5700000000000002,'FITBIT','synced 17:34 ET');
+INSERT INTO body_metrics VALUES('2026-04-08',173.099999999999994,78.5,21.1999999999999992,NULL,NULL,26.5300000000000011,'FITBIT','synced 23:53 ET');
+INSERT INTO body_metrics VALUES('2026-04-09',172.800000000000011,78.4000000000000056,21.1999999999999992,NULL,NULL,26.5199999999999995,'FITBIT','synced 19:13 ET');
+INSERT INTO body_metrics VALUES('2026-04-10',172.0,78.0,21.0,NULL,NULL,26.3700000000000009,'FITBIT','synced 16:00 ET');
+INSERT INTO body_metrics VALUES('2026-04-11',172.0,78.0,21.0,NULL,NULL,26.379999999999999,'FITBIT','synced 16:00 ET');
+CREATE TABLE body_scan (
+    date                        TEXT    PRIMARY KEY,  -- YYYY-MM-DD
+    scan_type                   TEXT    NOT NULL,     -- DEXA | InBody | other
+    total_bf_pct                REAL,
+    lean_mass_lbs               REAL,
+    lean_mass_kg                REAL,
+    bone_density                REAL,                  -- g/cm²
+    visceral_fat_area           REAL,                  -- cm²
+    trunk_fat_pct               REAL,
+    arms_fat_pct                REAL,
+    legs_fat_pct                REAL,
+    renpho_bf_same_week         REAL,                  -- for DEXA-Renpho offset calibration
+    dexa_renpho_offset          REAL,                  -- BF% delta for reconciling Renpho readings
+    rmr_cal                     REAL,                  -- DEXA-derived RMR
+    source                      TEXT    NOT NULL,      -- usually DEXA
+    source_file                 TEXT,                  -- original PDF filename
+    notes                       TEXT
+) STRICT;
+INSERT INTO body_scan VALUES('2026-04-02','DEXA',26.3000000000000007,128.599999999999994,58.2999999999999971,1.26400000000000001,71.0499999999999971,31.3000000000000007,20.6999999999999992,22.6000000000000014,NULL,NULL,1618.0,'DEXA PDF','fitness/uploads/dexa_2026-04-02.pdf','First baseline scan. A/G ratio 1.28, VAT 1.46 lbs, RSMI 10.13. Added RMR column and value — extracted from DEXA PDF 2026-04-02. RMR: 1618 cal/day');
+CREATE TABLE nutrition (
+    date         TEXT    PRIMARY KEY,
+    calories     REAL,
+    protein_g    REAL,
+    carbs_g      REAL,
+    fat_g        REAL,
+    fiber_g      REAL,
+    sodium_mg    REAL,
+    source       TEXT    NOT NULL,                      -- FITBIT | TELEGRAM | MANUAL
+    notes        TEXT
+) STRICT;
+INSERT INTO nutrition VALUES('2026-03-08',2085.0,95.0,256.0,89.0,39.0,4231.0,'FITBIT','synced 19:39 ET');
+INSERT INTO nutrition VALUES('2026-03-09',1720.0,166.0,108.0,82.0,28.0,3971.0,'FITBIT','synced 19:39 ET');
+INSERT INTO nutrition VALUES('2026-03-10',2964.0,372.0,166.0,104.0,33.0,4889.0,'FITBIT','synced 19:39 ET');
+INSERT INTO nutrition VALUES('2026-03-11',4152.0,501.0,95.0,160.0,4.0,3580.0,'FITBIT','synced 19:39 ET');
+INSERT INTO nutrition VALUES('2026-03-12',1951.0,203.0,116.0,91.0,25.0,2163.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-13',1771.0,171.0,116.0,84.0,17.0,1304.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-14',1274.0,194.0,59.0,29.0,3.0,1646.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-15',1438.0,158.0,116.0,57.0,46.0,2389.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-16',1448.0,139.0,39.0,84.0,8.0,1813.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-17',1448.0,186.0,73.0,51.0,13.0,2708.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-18',1454.0,146.0,145.0,60.0,55.0,4163.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-19',1661.0,180.0,71.0,87.0,39.0,2532.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-20',2949.0,220.0,227.0,154.0,74.0,3452.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-21',705.0,9.0,76.0,41.0,1.0,700.0,'FITBIT','synced 19:40 ET');
+INSERT INTO nutrition VALUES('2026-03-22',370.0,0.0,67.0,12.0,0.0,323.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-23',370.0,0.0,67.0,12.0,0.0,323.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-24',520.0,56.0,32.0,20.0,2.0,300.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-25',2400.0,194.0,171.0,110.0,22.0,4620.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-26',1699.0,100.0,160.0,79.0,9.0,3311.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-27',1518.0,142.0,122.0,64.0,23.0,1408.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-28',1380.0,115.0,178.0,35.0,27.0,1968.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-29',2123.0,203.52000000000001,135.569999999999993,83.3299999999999982,13.4000000000000003,1856.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-30',4069.0,405.490000000000009,300.100000000000022,149.650000000000005,18.5,5978.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-03-31',1588.0,122.0,105.0,94.0,36.0,1135.0,'FITBIT','synced 19:41 ET');
+INSERT INTO nutrition VALUES('2026-04-01',3998.0,382.0,247.0,174.0,44.0,3970.0,'FITBIT','synced 19:42 ET');
+INSERT INTO nutrition VALUES('2026-04-02',1860.0,98.0,232.0,75.0,29.0,2255.0,'FITBIT','synced 19:42 ET');
+INSERT INTO nutrition VALUES('2026-04-03',1280.0,115.0,99.0,60.0,27.0,2049.0,'FITBIT','synced 19:42 ET');
+INSERT INTO nutrition VALUES('2026-04-04',1400.0,168.0,47.0,61.0,4.0,1656.0,'FITBIT',NULL);
+INSERT INTO nutrition VALUES('2026-04-05',3146.0,186.0,328.0,122.0,26.0,6372.0,'FITBIT','synced 20:13 ET');
+INSERT INTO nutrition VALUES('2026-04-06',1826.0,197.0,196.0,36.0,35.0,4410.0,'FITBIT','synced 22:34 ET');
+INSERT INTO nutrition VALUES('2026-04-07',1238.0,168.0,83.0,33.0,20.0,1545.0,'FITBIT','synced 17:35 ET');
+INSERT INTO nutrition VALUES('2026-04-08',2435.0,160.0,124.0,148.0,20.0,1821.0,'FITBIT','synced 23:54 ET');
+INSERT INTO nutrition VALUES('2026-04-09',1490.0,105.0,147.0,53.0,8.0,1173.0,'FITBIT','synced 19:13 ET');
+INSERT INTO nutrition VALUES('2026-04-10',582.0,33.0,23.0,44.0,3.0,0.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-11',1359.0,35.0,186.0,49.0,11.0,1160.0,'FITBIT','synced 12:14 ET');
+CREATE TABLE workout (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    date          TEXT    NOT NULL,
+    exercise      TEXT    NOT NULL,
+    sets          INTEGER NOT NULL,
+    reps          INTEGER NOT NULL,
+    weight_lbs    REAL    NOT NULL,                    -- 0 OK for bodyweight
+    rpe           REAL,                                  -- nullable; RPE 0–10
+    volume_lbs    REAL,                                  -- stored (not computed) to match sheet
+    session_type  TEXT,                                  -- BRO_SPLIT_LEGS, UPPER, etc.
+    source        TEXT    NOT NULL,                      -- TELEGRAM | MANUAL
+    notes         TEXT
+) STRICT;
+INSERT INTO workout VALUES(1,'2026-04-04','Leg Press',3,8,320.0,NULL,7680.0,'Legs & Abs','TELEGRAM',NULL);
+INSERT INTO workout VALUES(2,'2026-04-04','Leg Extension',3,8,135.0,NULL,3240.0,'Legs & Abs','TELEGRAM',NULL);
+INSERT INTO workout VALUES(3,'2026-04-04','Captain Chair',3,8,8.0,NULL,192.0,'Legs & Abs','TELEGRAM',NULL);
+INSERT INTO workout VALUES(4,'2026-04-06','Pull Ups',1,7,174.199999999999988,NULL,1219.40000000000009,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(5,'2026-04-06','Lat Pull Downs',1,8,160.0,NULL,1280.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(6,'2026-04-06','Lat Pull Downs',1,5,160.0,NULL,800.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(7,'2026-04-06','Lat Pull Downs',1,8,160.0,NULL,1280.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(8,'2026-04-06','Reverse Pec Fly',1,10,115.0,NULL,1150.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(9,'2026-04-06','Reverse Pec Fly',1,7,115.0,NULL,805.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(10,'2026-04-06','Reverse Pec Fly',1,4,115.0,NULL,460.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(11,'2026-04-06','Preacher Dumbbell Curls Left',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(12,'2026-04-06','Preacher Dumbbell Curls Right',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(13,'2026-04-07','Incline Dumbbell Press',3,3,50.0,NULL,450.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(14,'2026-04-07','Single Arm Cable Lateral Raise',3,10,12.5,NULL,375.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(15,'2026-04-07','Seated Pec Fly Machine',3,8,130.0,NULL,3120.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(16,'2026-04-07','Shoulder Press Machine',3,6,80.0,NULL,1440.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(17,'2026-04-08','Leg Press',3,8,320.0,NULL,7680.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(18,'2026-04-08','Leg Curl',3,10,100.0,NULL,3000.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(19,'2026-04-08','Leg Extension',3,10,140.0,NULL,4200.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(20,'2026-04-08','Weighted Captain Chair',3,10,8.0,NULL,240.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(21,'2026-04-09','Pull Up',7,1,172.800000000000011,NULL,1209.5999999999999,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(22,'2026-04-09','Lat Pulldown',3,8,160.0,NULL,3840.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(23,'2026-04-09','Seated Row Machine',3,10,85.0,NULL,2550.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(24,'2026-04-09','Reverse Pec Fly',3,8,100.0,NULL,2400.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(25,'2026-04-09','Preacher Dumbbell Curls Left',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(26,'2026-04-09','Preacher Dumbbell Curls Right',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(27,'2026-04-11','Seated Leg Press',3,10,320.0,NULL,9600.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(28,'2026-04-11','Weighted Captain Chair',3,10,10.0,NULL,300.0,'BRO_SPLIT','TELEGRAM',NULL);
+CREATE TABLE cardio (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    date           TEXT    NOT NULL,
+    exercise       TEXT    NOT NULL,                     -- Treadmill, Bike, etc.
+    duration_min   REAL    NOT NULL,
+    speed          REAL,                                 -- mph or km/h
+    incline        REAL,                                 -- %
+    net_calories   REAL,
+    met_used       REAL,
+    source         TEXT    NOT NULL,
+    notes          TEXT
+) STRICT;
+INSERT INTO cardio VALUES(1,'2026-04-06','Treadmill',45.0,3.5,3.5,284.0,5.0,'TELEGRAM','45 min at 4.5 mph, 4.5% incline. Net 378 kcal using user''s measured RMR 1618. ACSM equation (VO2 25.35 ml/kg/min).');
+INSERT INTO cardio VALUES(2,'2026-04-07','Treadmill',45.0,NULL,NULL,284.0,5.0,'TELEGRAM','3.5 mph at 3.5% incline. Net calories calculated from user''s RMR 1618 and ACSM treadmill equation.');
+INSERT INTO cardio VALUES(3,'2026-04-09','Treadmill',45.0,3.5,3.5,245.0,4.79999999999999982,'TELEGRAM','Updated with calculated net calories burned based on current weight and RMR');
+CREATE TABLE recovery (
+    date                  TEXT    PRIMARY KEY,
+    efficiency_pct        REAL,                          -- % of time in bed asleep (was misnamed "Sleep Score")
+    sleep_hours           REAL,                          -- total actual asleep (all sessions, post-04-11 fix)
+    steps                 INTEGER,
+    active_minutes        INTEGER,
+    hrv                   REAL,                          -- nullable: not in standard Fitbit Web API
+    resting_hr            INTEGER,
+    sleep_score_computed  REAL,                          -- 0-100 proxy formula (added 2026-04-11)
+    time_in_bed_h         REAL,                          -- raw, includes wake within sessions (added 2026-04-11)
+    source                TEXT    NOT NULL,
+    notes                 TEXT
+) STRICT;
+INSERT INTO recovery VALUES('2026-03-05',90.0,5.70000000000000017,6331,72,NULL,61,83.0,6.29999999999999982,'FITBIT','deep:68m light:187m rem:86m wake:37m synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-06',NULL,NULL,3519,38,NULL,62,NULL,NULL,'FITBIT','synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-07',NULL,NULL,37187,359,NULL,62,NULL,NULL,'FITBIT','synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-08',NULL,NULL,15474,140,NULL,63,NULL,NULL,'FITBIT','synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-09',94.0,6.29999999999999982,13450,126,NULL,64,88.0,6.70000000000000017,'FITBIT','deep:78m light:185m rem:117m wake:22m synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-10',89.0,6.20000000000000017,13121,110,NULL,64,86.0,7.0,'FITBIT','deep:67m light:232m rem:73m wake:46m synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-11',93.0,6.20000000000000017,9371,38,NULL,64,87.0,6.70000000000000017,'FITBIT','deep:70m light:211m rem:94m wake:27m synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-12',NULL,NULL,13405,88,NULL,65,NULL,NULL,'FITBIT','synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-13',90.0,5.40000000000000035,11316,115,NULL,65,81.0,6.0,'FITBIT','deep:77m light:161m rem:88m wake:35m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-14',93.0,4.59999999999999964,16070,109,NULL,66,77.0,4.90000000000000035,'FITBIT','deep:73m light:122m rem:80m wake:20m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-15',96.0,6.5,10577,68,NULL,66,90.0,6.79999999999999982,'FITBIT','deep:76m light:213m rem:101m wake:18m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-16',98.0,4.40000000000000035,13459,101,NULL,64,77.0,4.5,'FITBIT','deep:82m light:122m rem:62m wake:6m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-17',89.0,4.70000000000000017,9618,61,NULL,63,77.0,5.20000000000000017,'FITBIT','deep:77m light:143m rem:59m wake:32m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-18',88.0,6.09999999999999964,13712,79,NULL,61,85.0,6.90000000000000035,'FITBIT','deep:72m light:196m rem:96m wake:48m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-19',91.0,7.20000000000000017,6693,35,NULL,61,93.0,7.90000000000000035,'FITBIT','deep:98m light:209m rem:127m wake:42m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-20',92.0,4.40000000000000035,18661,150,NULL,60,76.0,4.79999999999999982,'FITBIT','deep:46m light:167m rem:53m wake:23m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-21',NULL,NULL,12900,116,NULL,60,NULL,NULL,'FITBIT','synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-22',91.0,8.0,1075,8,NULL,61,98.0,8.80000000000000071,'FITBIT','deep:112m light:259m rem:108m wake:50m synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-23',NULL,NULL,0,0,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-24',NULL,NULL,0,0,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-25',NULL,NULL,4639,67,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-26',NULL,NULL,0,0,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-27',NULL,NULL,0,0,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-28',NULL,NULL,4622,12,NULL,61,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-29',92.0,6.40000000000000035,21588,178,NULL,62,88.0,6.90000000000000035,'FITBIT','deep:56m light:226m rem:100m wake:33m synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-30',90.0,7.09999999999999964,23170,214,NULL,63,92.0,7.90000000000000035,'FITBIT','deep:90m light:223m rem:113m wake:49m synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-31',94.0,2.89999999999999991,3847,0,NULL,63,42.0,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-04-01',91.0,7.70000000000000017,13819,117,NULL,63,96.0,8.5,'FITBIT','deep:79m light:273m rem:108m wake:47m synced 19:42 ET');
+INSERT INTO recovery VALUES('2026-04-02',91.0,5.09999999999999964,6870,27,NULL,62,80.0,5.59999999999999964,'FITBIT','deep:90m light:140m rem:74m wake:31m synced 19:42 ET');
+INSERT INTO recovery VALUES('2026-04-03',NULL,NULL,24696,245,NULL,63,NULL,NULL,'FITBIT','synced 19:42 ET');
+INSERT INTO recovery VALUES('2026-04-04',83.0,5.79999999999999982,698,0,NULL,63,82.0,7.0,'FITBIT','deep:89m light:175m rem:86m wake:72m');
+INSERT INTO recovery VALUES('2026-04-05',93.0,7.0,6841,36,NULL,64,92.0,7.5,'FITBIT','deep:87m light:243m rem:87m wake:30m synced 20:13 ET');
+INSERT INTO recovery VALUES('2026-04-06',91.0,4.70000000000000017,8876,48,NULL,63,77.0,5.09999999999999964,'FITBIT','deep:60m light:161m rem:57m wake:27m synced 22:33 ET');
+INSERT INTO recovery VALUES('2026-04-07',NULL,NULL,11365,102,NULL,NULL,NULL,NULL,'FITBIT','synced 17:35 ET');
+INSERT INTO recovery VALUES('2026-04-08',93.0,4.90000000000000035,3834,18,NULL,61,79.0,5.29999999999999982,'FITBIT','deep:76m light:161m rem:56m wake:22m synced 23:54 ET');
+INSERT INTO recovery VALUES('2026-04-09',92.0,6.5,4711,55,NULL,60,89.0,7.09999999999999964,'FITBIT','deep:82m light:225m rem:84m wake:33m synced 19:13 ET');
+INSERT INTO recovery VALUES('2026-04-10',NULL,NULL,4555,41,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-11',95.0,5.29999999999999982,NULL,NULL,NULL,NULL,82.0,5.59999999999999964,'FITBIT','deep:82m light:157m rem:80m wake:16m synced 16:00 ET');
+CREATE TABLE routine (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    effective_from  TEXT    NOT NULL,                    -- YYYY-MM-DD
+    effective_to    TEXT,                                -- NULL = current
+    day_of_week     INTEGER NOT NULL,                    -- 0=Mon .. 6=Sun (ISO)
+    session_type    TEXT    NOT NULL,                    -- BRO_SPLIT_LEGS | REST | etc.
+    exercises_json  TEXT    NOT NULL,                    -- JSON array of exercise names
+    notes           TEXT,
+    CHECK (day_of_week BETWEEN 0 AND 6)
+) STRICT;
+CREATE TABLE user_facts (
+    key         TEXT    PRIMARY KEY,
+    value       TEXT    NOT NULL,
+    updated_at  TEXT    NOT NULL
+) STRICT;
+INSERT INTO user_facts VALUES('height_cm','171.5','2026-04-12');
+INSERT INTO user_facts VALUES('birth_date','1984-04-14','2026-04-12');
+INSERT INTO user_facts VALUES('goal_bf_pct','15','2026-04-12');
+INSERT INTO user_facts VALUES('goal_weight_lbs','150','2026-04-12');
+CREATE TABLE events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts           TEXT    NOT NULL,                       -- ISO8601 with tz offset
+    kind         TEXT    NOT NULL,
+    payload_json TEXT    NOT NULL,                       -- free-form per kind
+    user_msg_id  TEXT                                    -- Telegram msg id, nullable
+) STRICT;
+DELETE FROM sqlite_sequence;
+INSERT INTO sqlite_sequence VALUES('workout',28);
+INSERT INTO sqlite_sequence VALUES('cardio',3);
+CREATE INDEX idx_workout_date       ON workout(date);
+CREATE INDEX idx_workout_exercise   ON workout(exercise);
+CREATE INDEX idx_workout_date_ex    ON workout(date, exercise);
+CREATE INDEX idx_cardio_date ON cardio(date);
+CREATE INDEX idx_routine_active ON routine(effective_from, effective_to);
+CREATE INDEX idx_events_ts    ON events(ts);
+CREATE INDEX idx_events_kind  ON events(kind);
+CREATE VIEW latest_body_scan AS
+SELECT * FROM body_scan ORDER BY date DESC LIMIT 1;
+CREATE VIEW latest_weight AS
+SELECT * FROM body_metrics ORDER BY date DESC LIMIT 1;
+CREATE VIEW active_routine AS
+SELECT * FROM routine
+WHERE effective_to IS NULL
+   OR effective_to >= date('now');
+COMMIT;

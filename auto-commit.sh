@@ -19,6 +19,13 @@ if ! flock -n 9; then
     exit 0
 fi
 
+# Dump SQLite to text for diff-friendly git history
+DB="$REPO/v2/lifeos.db"
+DUMP="$REPO/v2/lifeos.sql"
+if [ -f "$DB" ]; then
+    sqlite3 "$DB" .dump > "$DUMP" 2>/dev/null || true
+fi
+
 # Check if there are any changes (tracked or untracked, excluding gitignored)
 if git diff --quiet HEAD && [ -z "$(git ls-files --others --exclude-standard)" ]; then
     echo "No changes to commit."
