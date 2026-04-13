@@ -1,6 +1,6 @@
 # J.A.R.V.I.S. — Architecture Document (v2)
 
-Last updated: 2026-04-12
+Last updated: 2026-04-13
 
 ## Maintenance Rule
 
@@ -8,12 +8,17 @@ Last updated: 2026-04-12
 
 ## Design Principle
 
-Deterministic Python handles all CRUD, date math, routing, and retries. The LLM (Claude Sonnet) is limited to:
+**Musk's Algorithm applies to every change:** Question the requirement → Delete → Simplify → Accelerate → Automate. Don't optimize what shouldn't exist.
+
+Deterministic Python handles CRUD writes, timezone-sensitive date math, and schema enforcement. The LLM handles all natural language comprehension — including date ranges, ambiguous queries, and intent classification. Don't put deterministic code in front of what the LLM already understands.
+
+LLM scope:
 1. Coaching prose and analysis
 2. DEXA PDF data extraction (vision)
-3. Classifying ambiguous queries that miss the regex router
+3. All range/trend queries (natural language → tool calls)
+4. Classifying ambiguous queries that miss the regex router
 
-This inversion was triggered by 4 model-behavior failures in a single day (2026-04-11). See `decisions.log` entry `2026-04-11 | SQLite + deterministic router rebuild`.
+This architecture evolved from the 2026-04-11 rebuild (deterministic-first) refined by 2026-04-13 lesson: regex range routing intercepted and broke natural language the LLM handles natively. Range routes deleted; intent names preserved for classifier.
 
 ## Data Flow
 
@@ -43,7 +48,7 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 - **`soul.md`** — System prompt for coaching mode. Contains user stats, core rules, data source rules. Reloaded on every LLM call.
 
 ### v2/ — Deterministic Engine
-- **`v2/router.py`** — Regex intent router. Extracts date/range/exercise tokens. Never resolves dates (that's dates.py's job).
+- **`v2/router.py`** — Regex intent router. Handles single-date queries, bare keywords, write shorthand, and commands. Range queries are NOT routed here — the LLM handles them. Never resolves dates (that's dates.py's job).
 - **`v2/handlers/dates.py`** — All date resolution. America/Toronto timezone. The model never decides what "yesterday" means.
 - **`v2/handlers/query.py`** — Read-only SELECT helpers. Returns structured dicts. Null-aware averages, fuzzy exercise matching, stats fallback.
 - **`v2/handlers/log.py`** — Write handlers (INSERT/UPDATE). All writes go through here. Audit events logged automatically.

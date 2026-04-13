@@ -29,14 +29,20 @@ This is the only thing qa-check.sh fundamentally can't do — it doesn't know wh
 
 ---
 
-## 2. Over-Restriction Sweep
+## 2. Over-Restriction Sweep (Musk's Algorithm)
 
-Are any rules in `soul.md`, `bot.py`, or `qa-check.sh` doing what the model should be doing?
+Apply Elon Musk's 5-step algorithm in order:
 
-| Restriction | Where (file:line) | Could the model handle this via tool/prompt? | Remove? |
-|-------------|-------------------|----------------------------------------------|---------|
+1. **Question the requirement** — Who added this rule/code? Why? Is it still valid?
+2. **Delete** — Remove more than feels comfortable. If you don't add back 10%, you didn't delete enough.
+3. **Simplify** — Only AFTER deleting. Don't optimize a thing that should not exist.
+4. **Accelerate** — Only after 1-3.
+5. **Automate** — Last, not first.
 
-**Principle:** Monitor heavily, intervene rarely. Code-level rules that replace model reasoning are restrictions; checks that flag without intervening are not. If a rule exists because the model hallucinated, ask: was the cause bad architecture (missing tools, conversation soup) or bad model? **Fix architecture first.** Add code restrictions only when the model genuinely can't handle it after architecture is clean.
+| Restriction | Where (file:line) | Step 1: Why does this exist? | Step 2: Delete? | Step 3: Simplify? |
+|-------------|-------------------|------------------------------|-----------------|-------------------|
+
+**Principle:** If the LLM already understands something (natural language, intent, context), don't put deterministic code in front of it. Deterministic layers should only handle what actually needs to be deterministic (timezone math, schema enforcement, ACID writes). Code that intercepts and fails is worse than no code at all.
 
 ---
 

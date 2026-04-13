@@ -245,6 +245,20 @@ def main():
     tokens = load_tokens()
     conn = connect(DB_PATH)
 
+    # When syncing today (default), also re-pull yesterday to catch
+    # MFP-to-Fitbit lag — food logged after last night's sync.
+    dates_to_sync = [dt]
+    if not args.date:
+        dates_to_sync.insert(0, dt - timedelta(days=1))
+
+    for sync_date in dates_to_sync:
+        _sync_one_day(conn, tokens, cfg, sync_date)
+
+    conn.close()
+
+
+def _sync_one_day(conn, tokens, cfg, dt):
+    """Pull all Fitbit data for a single date."""
     log.info("=== Fitbit sync (v2/SQLite) starting for %s ===", dt)
 
     try:
@@ -288,7 +302,6 @@ def main():
     except Exception as e:
         log.error("Nutrition pull failed: %s", e)
 
-    conn.close()
     log.info("=== Fitbit sync (v2/SQLite) complete ===")
 
 

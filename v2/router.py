@@ -324,4 +324,8 @@ def list_intents() -> list[str]:
 
 def all_intent_names() -> set[str]:
     """All unique intent names — used by classify.py to validate LLM output."""
-    return {name for name, _, _ in _PATTERNS}
+    names = {name for name, _, _ in _PATTERNS}
+    # Range intents are handled by the LLM, not the router, but the
+    # classifier still needs to know they exist so it can route to them.
+    names |= {"weight_range", "nutrition_range", "training_range", "recovery_range"}
+    return names
