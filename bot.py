@@ -744,7 +744,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Send to Telegram
     for i in range(0, len(reply), 4096):
         try:
-            await update.message.reply_text(reply[i:i+4096], parse_mode="Markdown")
+            await update.message.reply_text(reply[i:i+4096])
         except Exception as e:
             lg.error("Telegram send failed: %s", e)
 
@@ -823,7 +823,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_conversation(f"[File: {filename}] {caption}", reply, tools_used if tools_used else None)
 
     for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i:i+4096], parse_mode="Markdown")
+        await update.message.reply_text(reply[i:i+4096])
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -864,7 +864,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_conversation(f"[Photo: {filename}] {caption}", reply, tools_used if tools_used else None)
 
     for i in range(0, len(reply), 4096):
-        await update.message.reply_text(reply[i:i+4096], parse_mode="Markdown")
+        await update.message.reply_text(reply[i:i+4096])
 
 
 def main():

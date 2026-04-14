@@ -12,3 +12,10 @@ QA alert sent: \n- No conversation log for today (2026-04-12)
 /home/openclaw/lifeos/qa-check.sh: line 258: [: 0
 0: integer expression expected
 QA Check (2026-04-13): all clear
+/home/openclaw/lifeos/qa-check.sh: line 193: [: 0
+0: integer expression expected
+/home/openclaw/lifeos/qa-check.sh: line 258: [: 0
+0: integer expression expected
+QA Check (2026-04-14) — 2 issue(s):
+- No training logged for 2026-04-13
+- Root-owned files found: /home/openclaw/lifeos/decisions.log /home/openclaw/lifeos/architecture.md /home/openclaw/lifeos/daily-audit-template.md /home/openclaw/lifeos/v2/router.py /home/openclaw/lifeos/v2/handlers/dates.py

@@ -12,6 +12,16 @@ RESOLVED="$LIFEOS_DIR/resolved.jsonl"
 QA_HITS="$LIFEOS_DIR/qa-hits.jsonl"
 LOG_DIR="$LIFEOS_DIR/logs"
 BACKUP_DIR="$V2_DIR/backups"
+LAST_RUN_FILE="$LIFEOS_DIR/.qa-last-run"
+
+# Window for journal-based checks: alert exactly once per incident.
+# Bootstrap (first run) scans last 24h; every subsequent run scans
+# from the timestamp written at the end of the previous successful run.
+if [ -f "$LAST_RUN_FILE" ]; then
+    SINCE_LAST="$(cat "$LAST_RUN_FILE")"
+else
+    SINCE_LAST="24 hours ago"
+fi
 
 TODAY=$(TZ="America/Toronto" date +%Y-%m-%d)
 YESTERDAY=$(TZ="America/Toronto" date -d "yesterday" +%Y-%m-%d)
@@ -139,7 +149,7 @@ fi
 # ============================================================
 # 12. File ownership (must be openclaw, not root)
 # ============================================================
-ROOT_FILES=$(find "$LIFEOS_DIR" -user root -not -path "*/.git/*" -not -name "*.pyc" 2>/dev/null | head -5)
+ROOT_FILES=$(find "$LIFEOS_DIR" -user root -not -path "*/.git/*" -not -name "*.pyc" 2>/dev/null | head -5 || true)
 if [ -n "$ROOT_FILES" ]; then
     flag "root_owned_files" "Root-owned files found: $(echo $ROOT_FILES | head -c 200)"
 fi
@@ -189,7 +199,7 @@ fi
 # 17. Tool verification failures in today's log
 # ============================================================
 if [ -f "$LOG_DIR/$TODAY.jsonl" ]; then
-    TOOL_FAILS=$(grep -c '"FAILED\|"ERROR\|"error' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null || echo 0)
+    TOOL_FAILS=$(grep -c '"FAILED\|"ERROR\|"error' "$LOG_DIR/$TODAY.jsonl" 2>/dev/null || true)
     if [ "$TOOL_FAILS" -gt 0 ]; then
         flag "tool_failures_$TODAY" "$TOOL_FAILS tool error(s) in today's conversation log"
     fi
@@ -254,7 +264,7 @@ fi
 # ============================================================
 PROPOSALS="$LIFEOS_DIR/soul-proposals.jsonl"
 if [ -f "$PROPOSALS" ]; then
-    PENDING=$(grep -c '"status": "pending"' "$PROPOSALS" 2>/dev/null || echo 0)
+    PENDING=$(grep -c '"status": "pending"' "$PROPOSALS" 2>/dev/null || true)
     if [ "$PENDING" -gt 5 ]; then
         flag "stale_soul_proposals" "$PENDING pending soul proposals — review may not be running"
     fi
@@ -268,6 +278,22 @@ for f in bot.py soul.md architecture.md auto-commit.sh qa-check.sh v2/schema.sql
         flag "missing_file_$f" "Missing expected file: $f"
     fi
 done
+
+# ============================================================
+# 24. Telegram send failures since last QA run
+# ============================================================
+SEND_FAILS=$(journalctl -u lifeos-bot --since "$SINCE_LAST" --no-pager 2>/dev/null | grep -c "Telegram send failed" || true)
+if [ "$SEND_FAILS" -gt 0 ]; then
+    flag "telegram_send_fail_$TODAY" "$SEND_FAILS Telegram send failure(s) since last check — replies dropped silently"
+fi
+
+# ============================================================
+# 25. Tool tracebacks since last QA run (tool script crashes)
+# ============================================================
+TOOL_CRASHES=$(journalctl -u lifeos-bot --since "$SINCE_LAST" --no-pager 2>/dev/null | grep -c "Tool result:.*Traceback" || true)
+if [ "$TOOL_CRASHES" -gt 0 ]; then
+    flag "tool_crash_$TODAY" "$TOOL_CRASHES tool invocation(s) crashed with traceback since last check"
+fi
 
 # ============================================================
 # Send alert if any unresolved flags
@@ -287,3 +313,6 @@ if [ ${#FLAGS[@]} -gt 0 ]; then
 else
     echo "QA Check ($TODAY): all clear"
 fi
+
+# Record successful completion timestamp for next run's journal window.
+date -Iseconds > "$LAST_RUN_FILE"

@@ -6,7 +6,7 @@ What `qa-check.sh` can't catch automatically. Run with Claude Code at end of day
 
 **Log file:** `/home/openclaw/lifeos/logs/YYYY-MM-DD.jsonl`
 
-**Already automated** (do NOT repeat here): said-vs-did, BF source, training/nutrition logged, ownership drift, tool errors, hallucinated saves, exercise count mismatch, stale soul proposals. See the QA Checks table in `architecture.md` — anything covered there is qa-check.sh's job, not this audit's.
+**Already automated** (do NOT repeat here): said-vs-did, BF source, training/nutrition logged, ownership drift, tool errors, hallucinated saves, exercise count mismatch, stale soul proposals, Telegram send failures, tool invocation tracebacks. See the QA Checks table in `architecture.md` — anything covered there is qa-check.sh's job, not this audit's.
 
 This audit only does the things automation **can't** do: judgment calls about intent, restrictions, and the audit itself.
 
