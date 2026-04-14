@@ -246,6 +246,9 @@ INSERT INTO user_facts VALUES('height_cm','171.5','2026-04-12');
 INSERT INTO user_facts VALUES('birth_date','1984-04-14','2026-04-12');
 INSERT INTO user_facts VALUES('goal_bf_pct','15','2026-04-12');
 INSERT INTO user_facts VALUES('goal_weight_lbs','150','2026-04-12');
+INSERT INTO user_facts VALUES('calorie_goal','1200','2026-04-14');
+INSERT INTO user_facts VALUES('protein_goal_g','180','2026-04-14');
+INSERT INTO user_facts VALUES('sleep_hours_goal','7','2026-04-14');
 CREATE TABLE events (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     ts           TEXT    NOT NULL,                       -- ISO8601 with tz offset
