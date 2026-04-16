@@ -16,3 +16,7 @@
 2026-04-15 09:00:01,762 INFO Trigger fired: Weight up +3.1 lbs this week (172.8 → 175.9) while goal is 150.0 lbs. Review nutrition?
 2026-04-15 09:00:02,392 INFO Sent 2 trigger alert(s)
 2026-04-15 09:00:02,392 INFO Sent 2 trigger alert(s)
+2026-04-16 09:00:02,042 INFO Trigger fired: No training logged in 5 days (last: 2026-04-11). Rest day or missed log?
+2026-04-16 09:00:02,042 INFO Trigger fired: No training logged in 5 days (last: 2026-04-11). Rest day or missed log?
+2026-04-16 09:00:02,750 INFO Sent 1 trigger alert(s)
+2026-04-16 09:00:02,750 INFO Sent 1 trigger alert(s)
