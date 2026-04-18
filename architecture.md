@@ -33,7 +33,7 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
   NO  → v2/handlers/classify.py (Claude Haiku, picks from known intents)
        ↓ classified?
        YES → same handler path
-       NO  → Claude Sonnet full conversation (coaching/analysis)
+       NO  → Grok 4.1 fast full conversation (coaching/analysis)
             → may call tools: query_data, log_*, save_memory, sync_fitbit
 ```
 
@@ -44,7 +44,7 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 ## Components
 
 ### Core Bot
-- **`bot.py`** — Telegram bot. Routes messages through v2 router. CRUD handled deterministically. Coaching via Claude Sonnet (Anthropic SDK). Handles PDF/photo uploads with vision.
+- **`bot.py`** — Telegram bot. Routes messages through v2 router. CRUD handled deterministically. Coaching via Grok 4.1 fast (xAI, OpenAI-compatible SDK). DEXA vision via Claude. Handles PDF/photo uploads.
 - **`soul.md`** — System prompt for coaching mode. Contains user stats, core rules, data source rules. Reloaded on every LLM call.
 
 ### v2/ — Deterministic Engine
@@ -60,9 +60,9 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 - **`v2/lifeos_cli.py`** — CLI harness for testing queries.
 
 ### Data Pipeline
-- **`v2/ingest_fitbit.py`** — Fitbit API → SQLite. Replaces v1 fitbit_sync.py. Preserves non-null values on partial updates (fixes the overwrite bug). Runs via systemd timer.
+- **`v2/ingest_fitbit.py`** — Fitbit API → SQLite. Replaces v1 fitbit_sync.py. Preserves non-null values on partial updates (fixes the overwrite bug). Runs via systemd timer + 10am ET cron re-pull (catches late MFP syncs and Fitbit sleep corrections).
 - **`v2/export_to_sheet.py`** — SQLite → Google Sheet (one-way, via gog). Cron every 5 min.
-- **`v2/morning_brief.py`** — Daily 7am ET brief from SQLite. Assembles structured data, calls Claude for prose, sends to Telegram.
+- **`v2/morning_brief.py`** — Daily 7am ET brief from SQLite. Assembles structured data, calls Claude for prose, sends to Telegram. Reports both hours asleep and time in bed.
 
 ### Infrastructure
 - **`v2/backup.sh`** — Hourly SQLite backup with 48h/30d/12m retention ladder.
@@ -71,7 +71,7 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 
 ### Files Removed (Phase 3)
 - `fitbit_sync.py` (at /home/openclaw/) — replaced by v2/ingest_fitbit.py
-- `auth-heartbeat.sh` — no longer needed (SQLite doesn't require OAuth)
+- `auth-heartbeat.sh` — removed (SQLite doesn't require OAuth). Orphan log/state files cleaned up 2026-04-17.
 - `vendored/` — no longer needed
 - Google Sheets tools in bot.py — replaced by SQLite handlers
 
@@ -89,13 +89,17 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 | */5 * * * * | v2/export_to_sheet.py | SQLite → Sheet mirror |
 | 0 * * * * | v2/backup.sh | Hourly SQLite backup |
 
-Fitbit sync runs via `fitbit-sync.timer` systemd timer (3x/day → v2/ingest_fitbit.py).
+| 0 9 * * * | v2/triggers.py | Proactive coaching triggers |
+| 0 10 * * * | v2/ingest_fitbit.py | Re-pull yesterday's Fitbit (catches late MFP syncs) |
+
+Fitbit sync also runs via `fitbit-sync.timer` systemd timer (3x/day → v2/ingest_fitbit.py).
 
 ## Environment Variables
 
 All from `/opt/openclaw.env`:
 - `TELEGRAM_BOT_TOKEN`, `CHAT_ID` — Telegram
-- `ANTHROPIC_API_KEY` — Claude API (bot + classifier + morning brief + DEXA)
+- `ANTHROPIC_API_KEY` — Claude API (classifier + morning brief + DEXA vision only)
+- `XAI_API_KEY` — xAI/Grok API (bot coaching)
 - `SHEET_ID`, `GOG_ACCOUNT`, `GOG_PATH`, `GOG_KEYRING_PASSWORD` — Sheet export
 - `LIFEOS_DIR` — repo path (default: /home/openclaw/lifeos)
 - `AGENT_NAME`, `AGENT_EMOJI` — bot identity

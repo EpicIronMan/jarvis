@@ -191,7 +191,10 @@ def _template_brief(ctx: dict) -> str:
     if rec:
         parts = []
         if rec.get("sleep_hours"):
-            parts.append(f"{rec['sleep_hours']}h sleep")
+            sleep_str = f"{rec['sleep_hours']}h asleep"
+            if rec.get("time_in_bed_h"):
+                sleep_str += f" ({rec['time_in_bed_h']}h in bed)"
+            parts.append(sleep_str)
         if rec.get("steps"):
             parts.append(f"{rec['steps']:,} steps")
         if parts:

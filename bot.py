@@ -49,7 +49,7 @@ SOUL_PATH = BASE_DIR / "soul.md"
 # Add v2 to path for imports
 sys.path.insert(0, str(V2_DIR))
 
-from router import route, Intent, all_intent_names
+from router import route, Intent
 from handlers import dates, query, log as log_handlers
 from handlers.classify import classify
 
@@ -158,7 +158,10 @@ def _format_result(intent_name: str, result: dict | list | None, fields: dict = 
     if intent_name == "recovery_for" and isinstance(result, dict):
         parts = [f"Recovery ({result.get('date', '?')}):"]
         if result.get('sleep_hours') is not None:
-            parts.append(f"  Sleep: {result['sleep_hours']}h")
+            sleep_line = f"  Sleep: {result['sleep_hours']}h asleep"
+            if result.get('time_in_bed_h') is not None:
+                sleep_line += f" ({result['time_in_bed_h']}h in bed)"
+            parts.append(sleep_line)
         if result.get('efficiency_pct') is not None:
             parts.append(f"  Efficiency: {result['efficiency_pct']}%")
         if result.get('steps') is not None:
@@ -200,7 +203,7 @@ def _format_result(intent_name: str, result: dict | list | None, fields: dict = 
 
     # Write confirmations
     if intent_name in ("log_weight", "log_workout_shorthand", "log_nutrition_shorthand",
-                        "log_cardio", "log_body_scan", "rename_exercise", "edit_weight"):
+                        "log_cardio", "rename_exercise", "edit_weight"):
         return _format_write_confirmation(result)
 
     # Last exercise
@@ -245,7 +248,10 @@ def _format_stats(result: dict) -> str:
         label = f" ({rec.get('as_of', '')})" if isinstance(rec, dict) else ""
         parts = []
         if rec_data.get("sleep_hours"):
-            parts.append(f"{rec_data['sleep_hours']}h sleep")
+            sleep_str = f"{rec_data['sleep_hours']}h asleep"
+            if rec_data.get("time_in_bed_h"):
+                sleep_str += f" ({rec_data['time_in_bed_h']}h in bed)"
+            parts.append(sleep_str)
         if rec_data.get("steps"):
             parts.append(f"{rec_data['steps']:,} steps")
         if parts:
@@ -500,7 +506,6 @@ def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, lis
     Creates its own SQLite connection because this runs in a worker thread
     via asyncio.to_thread — SQLite connections can't cross threads.
     """
-    import time as _time
     conn = query.connect(DB_PATH)
     conversation.append({"role": "user", "content": user_content})
     tool_log = []
@@ -545,7 +550,11 @@ def ask_ai(user_content: str | list, conversation: list[dict]) -> tuple[str, lis
         # Execute tools and add results
         for tc in msg.tool_calls:
             fn_name = tc.function.name
-            fn_args = json.loads(tc.function.arguments)
+            try:
+                fn_args = json.loads(tc.function.arguments)
+            except json.JSONDecodeError:
+                lg.error("Malformed tool arguments for %s: %s", fn_name, tc.function.arguments[:200])
+                fn_args = {}
             lg.info("Tool call: %s(%s)", fn_name, json.dumps(fn_args)[:200])
             result = _execute_tool(fn_name, fn_args, conn)
             lg.info("Tool result: %s", result[:200])
@@ -726,7 +735,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply, tools_used = await asyncio.to_thread(ask_ai, user_text, conv)
             except Exception as e:
                 lg.exception("Classification/coaching error")
-                reply = f"Something went wrong: {e}"
+                reply = "Something went wrong. Check the logs for details."
                 tools_used = []
 
     finally:
@@ -812,7 +821,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tools_used = []
     except Exception as e:
         lg.exception("Document handler error")
-        reply = f"Something went wrong: {e}"
+        reply = "Something went wrong processing that file. Check the logs for details."
         tools_used = []
 
     reply = _clean_content(reply)

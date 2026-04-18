@@ -68,7 +68,7 @@ def weight_range(conn: sqlite3.Connection, start: str, end: str) -> dict:
         "start_weight": days[0].get("weight_lbs"),
         "end_weight": days[-1].get("weight_lbs"),
         "change": round(days[-1]["weight_lbs"] - days[0]["weight_lbs"], 1)
-            if days[0].get("weight_lbs") and days[-1].get("weight_lbs") else None,
+            if days[0].get("weight_lbs") is not None and days[-1].get("weight_lbs") is not None else None,
     }
 
 

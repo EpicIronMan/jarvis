@@ -66,8 +66,7 @@ def check_no_training(conn, today_d) -> str | None:
 
 def check_protein_below_target(conn, today_d) -> str | None:
     """Alert if avg protein below target for 3+ days."""
-    # Get protein target from user_facts (lean mass * 1.2g)
-    row = conn.execute("SELECT value FROM user_facts WHERE key = 'goal_bf_pct'").fetchone()
+    # Get protein target from lean mass * 1.2g
     scan = conn.execute("SELECT lean_mass_lbs FROM body_scan ORDER BY date DESC LIMIT 1").fetchone()
     if not scan or not scan[0]:
         return None

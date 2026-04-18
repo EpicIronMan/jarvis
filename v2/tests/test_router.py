@@ -66,23 +66,8 @@ class TestWeight:
     def test_latest_weight(self):
         assert route("latest weight").name == "weight_latest"
 
-    def test_weight_last_7_days(self):
-        r = route("weight last 7 days")
-        assert r.name == "weight_range"
-        assert r.fields["range"] == "last 7 days"
-
-    def test_weight_this_week(self):
-        r = route("weight this week")
-        assert r.name == "weight_range"
-        assert r.fields["range"] == "this week"
-
-    def test_weight_trend(self):
-        r = route("weight trend")
-        assert r.name == "weight_range"
-
-    def test_am_i_losing_weight(self):
-        r = route("am I losing weight")
-        assert r.name == "weight_range"
+    # Range queries (weight_range, etc.) are handled by the LLM classifier,
+    # not the deterministic router — per Musk's Algorithm decision 2026-04-13.
 
 
 class TestNutrition:
@@ -129,13 +114,7 @@ class TestNutrition:
         assert r.name == "nutrition_for"
         assert r.fields["date"] == "today"
 
-    def test_nutrition_this_week(self):
-        r = route("nutrition this week")
-        assert r.name == "nutrition_range"
-
-    def test_calories_last_7_days(self):
-        r = route("calories last 7 days")
-        assert r.name == "nutrition_range"
+    # Range queries handled by LLM classifier, not router.
 
 
 class TestTraining:
@@ -171,13 +150,7 @@ class TestTraining:
         assert r.name == "training_for"
         assert r.fields["date"] == "today"
 
-    def test_workouts_this_week(self):
-        r = route("workouts this week")
-        assert r.name == "training_range"
-
-    def test_training_last_7_days(self):
-        r = route("training last 7 days")
-        assert r.name == "training_range"
+    # Range queries handled by LLM classifier, not router.
 
 
 class TestRecovery:
@@ -215,13 +188,7 @@ class TestRecovery:
         r = route("recovery yesterday")
         assert r.name == "recovery_for"
 
-    def test_sleep_this_week(self):
-        r = route("sleep this week")
-        assert r.name == "recovery_range"
-
-    def test_recovery_last_7_days(self):
-        r = route("recovery last 7 days")
-        assert r.name == "recovery_range"
+    # Range queries handled by LLM classifier, not router.
 
 
 class TestCardio:
