@@ -57,7 +57,7 @@ INSERT INTO body_metrics VALUES('2026-04-18',174.400000000000005,79.099999999999
 INSERT INTO body_metrics VALUES('2026-04-19',175.900000000000005,79.7999999999999971,22.0,NULL,NULL,27.1200000000000009,'FITBIT','synced 16:00 ET');
 INSERT INTO body_metrics VALUES('2026-04-20',174.800000000000011,79.2999999999999971,21.6999999999999992,NULL,NULL,26.9499999999999992,'FITBIT','synced 16:00 ET');
 INSERT INTO body_metrics VALUES('2026-04-21',173.5,78.7000000000000028,21.3999999999999985,NULL,NULL,26.75,'FITBIT','synced 16:00 ET');
-INSERT INTO body_metrics VALUES('2026-04-22',174.400000000000005,79.0999999999999943,21.6000000000000014,NULL,NULL,26.8900000000000005,'FITBIT','synced 11:00 ET');
+INSERT INTO body_metrics VALUES('2026-04-22',174.400000000000005,79.0999999999999943,21.6000000000000014,NULL,NULL,26.8900000000000005,'FITBIT','synced 16:00 ET');
 CREATE TABLE body_scan (
     date                        TEXT    PRIMARY KEY,  -- YYYY-MM-DD
     scan_type                   TEXT    NOT NULL,     -- DEXA | InBody | other
@@ -508,10 +508,11 @@ INSERT INTO events VALUES(223,'2026-04-23T11:00:03.079476-04:00','handler_call',
 INSERT INTO events VALUES(224,'2026-04-23T11:00:05.393429-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(225,'2026-04-23T11:00:08.827042-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-22", "calories": 1984.0, "protein_g": 116.0}',NULL);
 INSERT INTO events VALUES(226,'2026-04-23T11:00:11.115926-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(227,'2026-04-23T16:00:01.663835-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-22", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
 DELETE FROM sqlite_sequence;
 INSERT INTO sqlite_sequence VALUES('workout',30);
 INSERT INTO sqlite_sequence VALUES('cardio',3);
-INSERT INTO sqlite_sequence VALUES('events',226);
+INSERT INTO sqlite_sequence VALUES('events',227);
 CREATE INDEX idx_workout_date       ON workout(date);
 CREATE INDEX idx_workout_exercise   ON workout(exercise);
 CREATE INDEX idx_workout_date_ex    ON workout(date, exercise);
