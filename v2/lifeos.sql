@@ -138,7 +138,7 @@ INSERT INTO nutrition VALUES('2026-04-21',730.0,48.0,104.0,23.0,19.0,580.0,'FITB
 INSERT INTO nutrition VALUES('2026-04-22',1984.0,116.0,143.0,114.0,19.0,3223.0,'FITBIT','synced 16:00 ET');
 INSERT INTO nutrition VALUES('2026-04-23',1340.0,39.0,179.0,64.0,19.0,1480.0,'FITBIT','synced 16:00 ET');
 INSERT INTO nutrition VALUES('2026-04-24',2079.0,138.0,236.0,52.0,20.0,1715.0,'FITBIT','synced 16:00 ET');
-INSERT INTO nutrition VALUES('2026-04-25',797.0,12.0,102.0,38.0,5.0,550.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-25',797.0,12.0,102.0,38.0,5.0,550.0,'FITBIT','synced 02:00 ET');
 CREATE TABLE workout (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     date          TEXT    NOT NULL,
@@ -259,7 +259,8 @@ INSERT INTO recovery VALUES('2026-04-21',NULL,NULL,853,NULL,NULL,NULL,NULL,NULL,
 INSERT INTO recovery VALUES('2026-04-22',NULL,NULL,NULL,102,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
 INSERT INTO recovery VALUES('2026-04-23',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
 INSERT INTO recovery VALUES('2026-04-24',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
-INSERT INTO recovery VALUES('2026-04-25',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-25',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 02:00 ET');
+INSERT INTO recovery VALUES('2026-04-26',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 02:00 ET');
 CREATE TABLE routine (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     effective_from  TEXT    NOT NULL,                    -- YYYY-MM-DD
@@ -555,10 +556,13 @@ INSERT INTO events VALUES(263,'2026-04-25T16:00:08.220946-04:00','handler_call',
 INSERT INTO events VALUES(264,'2026-04-25T16:00:08.802800-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-25", "weight_lbs": 177.5, "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(265,'2026-04-25T16:00:10.373468-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(266,'2026-04-25T16:00:10.687172-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-25", "calories": 797.0, "protein_g": 12.0}',NULL);
+INSERT INTO events VALUES(267,'2026-04-26T02:00:13.767680-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(268,'2026-04-26T02:00:17.679468-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-25", "calories": 797.0, "protein_g": 12.0}',NULL);
+INSERT INTO events VALUES(269,'2026-04-26T02:00:20.790433-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-26", "source": "FITBIT"}',NULL);
 DELETE FROM sqlite_sequence;
 INSERT INTO sqlite_sequence VALUES('workout',30);
 INSERT INTO sqlite_sequence VALUES('cardio',3);
-INSERT INTO sqlite_sequence VALUES('events',266);
+INSERT INTO sqlite_sequence VALUES('events',269);
 CREATE INDEX idx_workout_date       ON workout(date);
 CREATE INDEX idx_workout_exercise   ON workout(exercise);
 CREATE INDEX idx_workout_date_ex    ON workout(date, exercise);
