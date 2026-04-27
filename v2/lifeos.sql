@@ -122,4 +122,480 @@ INSERT INTO nutrition VALUES('2026-04-04',1400.0,168.0,47.0,61.0,4.0,1656.0,'FIT
 INSERT INTO nutrition VALUES('2026-04-05',3146.0,186.0,328.0,122.0,26.0,6372.0,'FITBIT','synced 20:13 ET');
 INSERT INTO nutrition VALUES('2026-04-06',1826.0,197.0,196.0,36.0,35.0,4410.0,'FITBIT','synced 22:34 ET');
 INSERT INTO nutrition VALUES('2026-04-07',1402.0,172.0,120.0,33.0,24.0,1558.0,'FITBIT','synced 10:16 ET');
-INSERT INTO nutrition VALUES('2026-04-08'
+INSERT INTO nutrition VALUES('2026-04-08',2435.0,160.0,124.0,148.0,20.0,1821.0,'FITBIT','synced 10:16 ET');
+INSERT INTO nutrition VALUES('2026-04-09',1623.0,105.0,181.0,53.0,8.0,1173.0,'FITBIT','synced 10:16 ET');
+INSERT INTO nutrition VALUES('2026-04-10',3132.0,127.0,262.0,182.0,14.0,4000.0,'FITBIT','synced 10:16 ET');
+INSERT INTO nutrition VALUES('2026-04-11',3399.0,119.0,350.0,169.0,23.0,3830.0,'FITBIT','synced 10:16 ET');
+INSERT INTO nutrition VALUES('2026-04-12',3542.0,144.0,506.0,102.0,27.0,5260.0,'FITBIT','synced 09:11 ET');
+INSERT INTO nutrition VALUES('2026-04-13',1813.0,140.0,184.0,76.0,54.0,7010.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-14',1304.0,146.0,115.0,38.0,28.0,1912.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-15',2037.0,110.0,189.0,98.0,16.0,1730.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-16',1574.0,168.0,135.0,50.0,31.0,2243.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-17',2163.0,228.0,165.0,80.0,36.0,4593.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-18',2474.0,187.0,191.0,105.0,18.0,3393.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-19',1474.0,42.0,174.0,67.0,10.0,4887.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-20',2825.0,146.0,333.0,95.0,27.0,3005.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-21',730.0,48.0,104.0,23.0,19.0,580.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-22',1984.0,116.0,143.0,114.0,19.0,3223.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-23',1340.0,39.0,179.0,64.0,19.0,1480.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-24',2079.0,138.0,236.0,52.0,20.0,1715.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-25',797.0,12.0,102.0,38.0,5.0,550.0,'FITBIT','synced 16:00 ET');
+INSERT INTO nutrition VALUES('2026-04-26',1243.0,171.0,53.0,37.0,4.0,2469.0,'FITBIT','synced 16:00 ET');
+CREATE TABLE workout (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    date          TEXT    NOT NULL,
+    exercise      TEXT    NOT NULL,
+    sets          INTEGER NOT NULL,
+    reps          INTEGER NOT NULL,
+    weight_lbs    REAL    NOT NULL,                    -- 0 OK for bodyweight
+    rpe           REAL,                                  -- nullable; RPE 0–10
+    volume_lbs    REAL,                                  -- stored (not computed) to match sheet
+    session_type  TEXT,                                  -- BRO_SPLIT_LEGS, UPPER, etc.
+    source        TEXT    NOT NULL,                      -- TELEGRAM | MANUAL
+    notes         TEXT
+) STRICT;
+INSERT INTO workout VALUES(1,'2026-04-04','Leg Press',3,8,320.0,NULL,7680.0,'Legs & Abs','TELEGRAM',NULL);
+INSERT INTO workout VALUES(2,'2026-04-04','Leg Extension',3,8,135.0,NULL,3240.0,'Legs & Abs','TELEGRAM',NULL);
+INSERT INTO workout VALUES(3,'2026-04-04','Captain Chair',3,8,8.0,NULL,192.0,'Legs & Abs','TELEGRAM',NULL);
+INSERT INTO workout VALUES(4,'2026-04-06','Pull Ups',1,7,174.199999999999988,NULL,1219.40000000000009,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(5,'2026-04-06','Lat Pull Downs',1,8,160.0,NULL,1280.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(6,'2026-04-06','Lat Pull Downs',1,5,160.0,NULL,800.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(7,'2026-04-06','Lat Pull Downs',1,8,160.0,NULL,1280.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(8,'2026-04-06','Reverse Pec Fly',1,10,115.0,NULL,1150.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(9,'2026-04-06','Reverse Pec Fly',1,7,115.0,NULL,805.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(10,'2026-04-06','Reverse Pec Fly',1,4,115.0,NULL,460.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(11,'2026-04-06','Preacher Dumbbell Curls Left',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(12,'2026-04-06','Preacher Dumbbell Curls Right',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(13,'2026-04-07','Incline Dumbbell Press',3,3,50.0,NULL,450.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(14,'2026-04-07','Single Arm Cable Lateral Raise',3,10,12.5,NULL,375.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(15,'2026-04-07','Seated Pec Fly Machine',3,8,130.0,NULL,3120.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(16,'2026-04-07','Shoulder Press Machine',3,6,80.0,NULL,1440.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(17,'2026-04-08','Leg Press',3,8,320.0,NULL,7680.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(18,'2026-04-08','Leg Curl',3,10,100.0,NULL,3000.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(19,'2026-04-08','Leg Extension',3,10,140.0,NULL,4200.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(20,'2026-04-08','Weighted Captain Chair',3,10,8.0,NULL,240.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(21,'2026-04-09','Pull Ups',7,1,172.800000000000011,NULL,1209.5999999999999,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(22,'2026-04-09','Lat Pulldown',3,8,160.0,NULL,3840.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(23,'2026-04-09','Seated Row Machine',3,10,85.0,NULL,2550.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(24,'2026-04-09','Reverse Pec Fly',3,8,100.0,NULL,2400.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(25,'2026-04-09','Preacher Dumbbell Curls Left',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(26,'2026-04-09','Preacher Dumbbell Curls Right',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(27,'2026-04-11','Seated Leg Press',3,10,320.0,NULL,9600.0,'BRO_SPLIT','TELEGRAM',NULL);
+INSERT INTO workout VALUES(28,'2026-04-11','Weighted Captain Chair',3,10,10.0,NULL,300.0,'BRO_SPLIT','TELEGRAM',NULL);
+CREATE TABLE cardio (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    date           TEXT    NOT NULL,
+    exercise       TEXT    NOT NULL,                     -- Treadmill, Bike, etc.
+    duration_min   REAL    NOT NULL,
+    speed          REAL,                                 -- mph or km/h
+    incline        REAL,                                 -- %
+    net_calories   REAL,
+    met_used       REAL,
+    source         TEXT    NOT NULL,
+    notes          TEXT
+) STRICT;
+INSERT INTO cardio VALUES(1,'2026-04-06','Treadmill',45.0,3.5,3.5,284.0,5.0,'TELEGRAM','45 min at 4.5 mph, 4.5% incline. Net 378 kcal using user''s measured RMR 1618. ACSM equation (VO2 25.35 ml/kg/min).');
+INSERT INTO cardio VALUES(2,'2026-04-07','Treadmill',45.0,NULL,NULL,284.0,5.0,'TELEGRAM','3.5 mph at 3.5% incline. Net calories calculated from user''s RMR 1618 and ACSM treadmill equation.');
+INSERT INTO cardio VALUES(3,'2026-04-09','Treadmill',45.0,3.5,3.5,245.0,4.79999999999999982,'TELEGRAM','Updated with calculated net calories burned based on current weight and RMR');
+CREATE TABLE recovery (
+    date                  TEXT    PRIMARY KEY,
+    efficiency_pct        REAL,                          -- % of time in bed asleep (was misnamed "Sleep Score")
+    sleep_hours           REAL,                          -- total actual asleep (all sessions, post-04-11 fix)
+    steps                 INTEGER,
+    active_minutes        INTEGER,
+    hrv                   REAL,                          -- nullable: not in standard Fitbit Web API
+    resting_hr            INTEGER,
+    sleep_score_computed  REAL,                          -- 0-100 proxy formula (added 2026-04-11)
+    time_in_bed_h         REAL,                          -- raw, includes wake within sessions (added 2026-04-11)
+    source                TEXT    NOT NULL,
+    notes                 TEXT
+) STRICT;
+INSERT INTO recovery VALUES('2026-03-05',90.0,5.70000000000000017,6331,72,NULL,61,83.0,6.29999999999999982,'FITBIT','deep:68m light:187m rem:86m wake:37m synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-06',NULL,NULL,3519,38,NULL,62,NULL,NULL,'FITBIT','synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-07',NULL,NULL,37187,359,NULL,62,NULL,NULL,'FITBIT','synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-08',NULL,NULL,15474,140,NULL,63,NULL,NULL,'FITBIT','synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-09',94.0,6.29999999999999982,13450,126,NULL,64,88.0,6.70000000000000017,'FITBIT','deep:78m light:185m rem:117m wake:22m synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-10',89.0,6.20000000000000017,13121,110,NULL,64,86.0,7.0,'FITBIT','deep:67m light:232m rem:73m wake:46m synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-11',93.0,6.20000000000000017,9371,38,NULL,64,87.0,6.70000000000000017,'FITBIT','deep:70m light:211m rem:94m wake:27m synced 19:39 ET');
+INSERT INTO recovery VALUES('2026-03-12',NULL,NULL,13405,88,NULL,65,NULL,NULL,'FITBIT','synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-13',90.0,5.40000000000000035,11316,115,NULL,65,81.0,6.0,'FITBIT','deep:77m light:161m rem:88m wake:35m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-14',93.0,4.59999999999999964,16070,109,NULL,66,77.0,4.90000000000000035,'FITBIT','deep:73m light:122m rem:80m wake:20m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-15',96.0,6.5,10577,68,NULL,66,90.0,6.79999999999999982,'FITBIT','deep:76m light:213m rem:101m wake:18m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-16',98.0,4.40000000000000035,13459,101,NULL,64,77.0,4.5,'FITBIT','deep:82m light:122m rem:62m wake:6m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-17',89.0,4.70000000000000017,9618,61,NULL,63,77.0,5.20000000000000017,'FITBIT','deep:77m light:143m rem:59m wake:32m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-18',88.0,6.09999999999999964,13712,79,NULL,61,85.0,6.90000000000000035,'FITBIT','deep:72m light:196m rem:96m wake:48m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-19',91.0,7.20000000000000017,6693,35,NULL,61,93.0,7.90000000000000035,'FITBIT','deep:98m light:209m rem:127m wake:42m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-20',92.0,4.40000000000000035,18661,150,NULL,60,76.0,4.79999999999999982,'FITBIT','deep:46m light:167m rem:53m wake:23m synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-21',NULL,NULL,12900,116,NULL,60,NULL,NULL,'FITBIT','synced 19:40 ET');
+INSERT INTO recovery VALUES('2026-03-22',91.0,8.0,1075,8,NULL,61,98.0,8.80000000000000071,'FITBIT','deep:112m light:259m rem:108m wake:50m synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-23',NULL,NULL,0,0,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-24',NULL,NULL,0,0,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-25',NULL,NULL,4639,67,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-26',NULL,NULL,0,0,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-27',NULL,NULL,0,0,NULL,NULL,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-28',NULL,NULL,4622,12,NULL,61,NULL,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-29',92.0,6.40000000000000035,21588,178,NULL,62,88.0,6.90000000000000035,'FITBIT','deep:56m light:226m rem:100m wake:33m synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-30',90.0,7.09999999999999964,23170,214,NULL,63,92.0,7.90000000000000035,'FITBIT','deep:90m light:223m rem:113m wake:49m synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-03-31',94.0,2.89999999999999991,3847,0,NULL,63,42.0,NULL,'FITBIT','synced 19:41 ET');
+INSERT INTO recovery VALUES('2026-04-01',91.0,7.70000000000000017,13819,117,NULL,63,96.0,8.5,'FITBIT','deep:79m light:273m rem:108m wake:47m synced 19:42 ET');
+INSERT INTO recovery VALUES('2026-04-02',91.0,5.09999999999999964,6870,27,NULL,62,80.0,5.59999999999999964,'FITBIT','deep:90m light:140m rem:74m wake:31m synced 19:42 ET');
+INSERT INTO recovery VALUES('2026-04-03',NULL,NULL,24696,245,NULL,63,NULL,NULL,'FITBIT','synced 19:42 ET');
+INSERT INTO recovery VALUES('2026-04-04',83.0,5.79999999999999982,698,0,NULL,63,82.0,7.0,'FITBIT','deep:89m light:175m rem:86m wake:72m');
+INSERT INTO recovery VALUES('2026-04-05',93.0,7.0,6841,36,NULL,64,92.0,7.5,'FITBIT','deep:87m light:243m rem:87m wake:30m synced 20:13 ET');
+INSERT INTO recovery VALUES('2026-04-06',91.0,4.70000000000000017,8876,48,NULL,63,77.0,5.09999999999999964,'FITBIT','deep:60m light:161m rem:57m wake:27m synced 22:33 ET');
+INSERT INTO recovery VALUES('2026-04-07',NULL,NULL,12449,102,NULL,63,NULL,NULL,'FITBIT','synced 10:16 ET');
+INSERT INTO recovery VALUES('2026-04-08',93.0,4.90000000000000035,4124,18,NULL,61,79.0,5.29999999999999982,'FITBIT','synced 10:16 ET');
+INSERT INTO recovery VALUES('2026-04-09',92.0,6.5,4952,55,NULL,60,89.0,7.09999999999999964,'FITBIT','synced 10:16 ET');
+INSERT INTO recovery VALUES('2026-04-10',NULL,NULL,6640,41,NULL,61,NULL,NULL,'FITBIT','synced 10:16 ET');
+INSERT INTO recovery VALUES('2026-04-11',95.0,5.29999999999999982,6764,28,NULL,63,82.0,5.59999999999999964,'FITBIT','synced 10:16 ET');
+INSERT INTO recovery VALUES('2026-04-12',92.0,4.90000000000000035,15101,146,NULL,64,79.0,5.29999999999999982,'FITBIT','synced 09:11 ET');
+INSERT INTO recovery VALUES('2026-04-13',92.0,8.09999999999999964,12633,123,NULL,63,98.0,8.80000000000000071,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-14',94.0,5.90000000000000035,14070,89,NULL,62,85.0,6.29999999999999982,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-15',88.0,5.0,12126,131,NULL,62,78.0,5.70000000000000017,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-16',94.0,7.70000000000000017,10887,74,NULL,64,97.0,8.19999999999999929,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-17',94.0,6.5,13767,76,NULL,64,89.0,6.90000000000000035,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-18',79.0,6.70000000000000017,11208,87,NULL,63,87.0,8.40000000000000035,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-19',NULL,NULL,6634,42,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-20',NULL,NULL,7940,144,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-21',NULL,NULL,853,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-22',NULL,NULL,NULL,102,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-23',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-24',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-25',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-04-26',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+CREATE TABLE routine (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    effective_from  TEXT    NOT NULL,                    -- YYYY-MM-DD
+    effective_to    TEXT,                                -- NULL = current
+    day_of_week     INTEGER NOT NULL,                    -- 0=Mon .. 6=Sun (ISO)
+    session_type    TEXT    NOT NULL,                    -- BRO_SPLIT_LEGS | REST | etc.
+    exercises_json  TEXT    NOT NULL,                    -- JSON array of exercise names
+    notes           TEXT,
+    CHECK (day_of_week BETWEEN 0 AND 6)
+) STRICT;
+CREATE TABLE user_facts (
+    key         TEXT    PRIMARY KEY,
+    value       TEXT    NOT NULL,
+    updated_at  TEXT    NOT NULL
+) STRICT;
+INSERT INTO user_facts VALUES('height_cm','171.5','2026-04-12');
+INSERT INTO user_facts VALUES('birth_date','1984-04-14','2026-04-12');
+INSERT INTO user_facts VALUES('goal_bf_pct','15','2026-04-12');
+INSERT INTO user_facts VALUES('goal_weight_lbs','150','2026-04-12');
+INSERT INTO user_facts VALUES('calorie_goal','1200','2026-04-14');
+INSERT INTO user_facts VALUES('protein_goal_g','180','2026-04-14');
+INSERT INTO user_facts VALUES('sleep_hours_goal','7','2026-04-14');
+CREATE TABLE events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts           TEXT    NOT NULL,                       -- ISO8601 with tz offset
+    kind         TEXT    NOT NULL,
+    payload_json TEXT    NOT NULL,                       -- free-form per kind
+    user_msg_id  TEXT                                    -- Telegram msg id, nullable
+) STRICT;
+INSERT INTO events VALUES(1,'2026-04-12T21:20:39.955343-04:00','handler_call','{"handler": "log_workout", "date": "2026-04-12", "n_exercises": 1, "total_volume": 4125.0, "session_type": "BRO_SPLIT"}',NULL);
+INSERT INTO events VALUES(2,'2026-04-12T21:20:40.267985-04:00','handler_call','{"handler": "log_workout", "date": "2026-04-12", "n_exercises": 1, "total_volume": 4725.0, "session_type": "BRO_SPLIT"}',NULL);
+INSERT INTO events VALUES(3,'2026-04-12T21:20:40.496360-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-12", "weight_lbs": 172.5, "source": "TELEGRAM"}',NULL);
+INSERT INTO events VALUES(4,'2026-04-12T21:20:40.711521-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-12", "weight_lbs": 170.0, "source": "RENPHO"}',NULL);
+INSERT INTO events VALUES(5,'2026-04-12T21:20:41.022347-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-12", "calories": 2100.0, "protein_g": 170.0}',NULL);
+INSERT INTO events VALUES(6,'2026-04-12T21:20:41.352412-04:00','handler_call','{"handler": "rename_exercise", "old_name": "Pull Up", "new_name": "Pull Ups", "rows_updated": 1}',NULL);
+INSERT INTO events VALUES(7,'2026-04-12T21:20:41.612958-04:00','handler_call','{"handler": "edit_weight", "date": "2026-04-10", "weight_lbs": 171.5}',NULL);
+INSERT INTO events VALUES(8,'2026-04-12T21:49:10.567150-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-12", "weight_lbs": 173.7, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(9,'2026-04-12T21:49:12.758181-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-12", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(10,'2026-04-12T21:49:13.503667-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-12", "calories": 602.0, "protein_g": 29.0}',NULL);
+INSERT INTO events VALUES(11,'2026-04-13T02:00:06.759871-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-13", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(12,'2026-04-13T08:42:01.148547-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-13", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(13,'2026-04-13T08:42:03.508653-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-13", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(14,'2026-04-13T09:11:14.776659-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-12", "weight_lbs": 173.7, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(15,'2026-04-13T09:11:16.606175-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-12", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(16,'2026-04-13T09:11:16.969388-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-12", "calories": 3542.0, "protein_g": 144.0}',NULL);
+INSERT INTO events VALUES(17,'2026-04-13T09:14:56.068153-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-13", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(18,'2026-04-13T09:14:57.564887-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-13", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(19,'2026-04-13T09:14:58.060727-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-13", "calories": 220.0, "protein_g": 16.0}',NULL);
+INSERT INTO events VALUES(20,'2026-04-13T09:16:47.761721-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-13", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(21,'2026-04-13T09:16:49.755561-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-13", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(22,'2026-04-13T09:16:50.117873-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-13", "calories": 220.0, "protein_g": 16.0}',NULL);
+INSERT INTO events VALUES(23,'2026-04-13T10:16:09.445355-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-07", "weight_lbs": 173.3, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(24,'2026-04-13T10:16:11.751533-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-07", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(25,'2026-04-13T10:16:12.186148-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-07", "calories": 1402.0, "protein_g": 172.0}',NULL);
+INSERT INTO events VALUES(26,'2026-04-13T10:16:12.766790-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-08", "weight_lbs": 173.1, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(27,'2026-04-13T10:16:14.707336-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-08", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(28,'2026-04-13T10:16:15.222392-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-08", "calories": 2435.0, "protein_g": 160.0}',NULL);
+INSERT INTO events VALUES(29,'2026-04-13T10:16:15.867905-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-09", "weight_lbs": 172.8, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(30,'2026-04-13T10:16:17.318525-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-09", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(31,'2026-04-13T10:16:17.662942-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-09", "calories": 1623.0, "protein_g": 105.0}',NULL);
+INSERT INTO events VALUES(32,'2026-04-13T10:16:18.166042-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-10", "weight_lbs": 172.0, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(33,'2026-04-13T10:16:21.090536-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-10", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(34,'2026-04-13T10:16:21.430223-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-10", "calories": 3132.0, "protein_g": 127.0}',NULL);
+INSERT INTO events VALUES(35,'2026-04-13T10:16:21.906529-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-11", "weight_lbs": 172.0, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(36,'2026-04-13T10:16:23.498659-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-11", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(37,'2026-04-13T10:16:23.895246-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-11", "calories": 3399.0, "protein_g": 119.0}',NULL);
+INSERT INTO events VALUES(38,'2026-04-14T08:35:48.284687-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-13", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(39,'2026-04-14T08:35:50.800617-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-13", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(40,'2026-04-14T08:35:51.519231-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-13", "calories": 1813.0, "protein_g": 140.0}',NULL);
+INSERT INTO events VALUES(41,'2026-04-14T08:35:52.207700-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-14", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(42,'2026-04-14T08:35:55.614182-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-14", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(43,'2026-04-14T11:00:02.258220-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-13", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(44,'2026-04-14T11:00:06.194351-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-13", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(45,'2026-04-14T11:00:07.664694-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-13", "calories": 1813.0, "protein_g": 140.0}',NULL);
+INSERT INTO events VALUES(46,'2026-04-14T11:00:09.149238-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-14", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(47,'2026-04-14T11:00:14.898084-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-14", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(48,'2026-04-14T16:00:02.259430-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-13", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(49,'2026-04-14T16:00:10.387428-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-13", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(50,'2026-04-14T16:00:13.100411-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-13", "calories": 1813.0, "protein_g": 140.0}',NULL);
+INSERT INTO events VALUES(51,'2026-04-14T16:00:13.519692-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-14", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(52,'2026-04-14T16:00:17.132629-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-14", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(53,'2026-04-14T16:00:17.523798-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-14", "calories": 1304.0, "protein_g": 146.0}',NULL);
+INSERT INTO events VALUES(54,'2026-04-15T02:00:03.582222-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-14", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(55,'2026-04-15T02:00:12.660565-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-14", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(56,'2026-04-15T02:00:13.902978-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-14", "calories": 1304.0, "protein_g": 146.0}',NULL);
+INSERT INTO events VALUES(57,'2026-04-15T02:00:20.861622-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-15", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(58,'2026-04-15T02:00:21.510878-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-15", "calories": 954.0, "protein_g": 114.0}',NULL);
+INSERT INTO events VALUES(59,'2026-04-15T11:00:04.632522-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-14", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(60,'2026-04-15T11:00:11.122147-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-14", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(61,'2026-04-15T11:00:11.772362-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-14", "calories": 1304.0, "protein_g": 146.0}',NULL);
+INSERT INTO events VALUES(62,'2026-04-15T11:00:12.423929-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-15", "weight_lbs": 171.7, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(63,'2026-04-15T11:00:14.848330-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-15", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(64,'2026-04-15T11:00:15.634772-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-15", "calories": 1304.0, "protein_g": 136.0}',NULL);
+INSERT INTO events VALUES(65,'2026-04-15T16:00:04.479378-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-14", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(66,'2026-04-15T16:00:06.073538-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-14", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(67,'2026-04-15T16:00:07.740467-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-14", "calories": 1304.0, "protein_g": 146.0}',NULL);
+INSERT INTO events VALUES(68,'2026-04-15T16:00:08.169125-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-15", "weight_lbs": 171.7, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(69,'2026-04-15T16:00:10.861689-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-15", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(70,'2026-04-15T16:00:12.824469-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-15", "calories": 1304.0, "protein_g": 136.0}',NULL);
+INSERT INTO events VALUES(71,'2026-04-16T02:00:09.289714-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-15", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(72,'2026-04-16T02:00:11.137092-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-15", "calories": 2037.0, "protein_g": 110.0}',NULL);
+INSERT INTO events VALUES(73,'2026-04-16T02:00:15.445376-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-16", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(74,'2026-04-16T02:00:16.143235-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-16", "calories": 908.0, "protein_g": 107.0}',NULL);
+INSERT INTO events VALUES(75,'2026-04-16T10:08:20.251128-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-15", "weight_lbs": 171.7, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(76,'2026-04-16T10:08:28.025050-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-15", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(77,'2026-04-16T10:08:28.694324-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-15", "calories": 2037.0, "protein_g": 110.0}',NULL);
+INSERT INTO events VALUES(78,'2026-04-16T10:08:29.426651-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-16", "weight_lbs": 172.0, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(79,'2026-04-16T10:08:32.842175-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-16", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(80,'2026-04-16T10:08:33.582683-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-16", "calories": 1098.0, "protein_g": 128.0}',NULL);
+INSERT INTO events VALUES(81,'2026-04-16T11:00:03.915182-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-15", "weight_lbs": 171.7, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(82,'2026-04-16T11:00:11.178328-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-15", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(83,'2026-04-16T11:00:11.613680-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-15", "calories": 2037.0, "protein_g": 110.0}',NULL);
+INSERT INTO events VALUES(84,'2026-04-16T11:00:12.012679-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-16", "weight_lbs": 172.0, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(85,'2026-04-16T11:00:13.457615-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-16", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(86,'2026-04-16T11:00:13.907123-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-16", "calories": 1098.0, "protein_g": 128.0}',NULL);
+INSERT INTO events VALUES(87,'2026-04-16T16:00:02.439642-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-15", "weight_lbs": 171.7, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(88,'2026-04-16T16:00:04.702904-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-15", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(89,'2026-04-16T16:00:05.073905-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-15", "calories": 2037.0, "protein_g": 110.0}',NULL);
+INSERT INTO events VALUES(90,'2026-04-16T16:00:05.425992-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-16", "weight_lbs": 172.0, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(91,'2026-04-16T16:00:09.678175-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-16", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(92,'2026-04-16T16:00:15.548842-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-16", "calories": 1230.0, "protein_g": 135.0}',NULL);
+INSERT INTO events VALUES(93,'2026-04-17T02:00:08.191534-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-16", "weight_lbs": 172.0, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(94,'2026-04-17T02:00:16.299151-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-16", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(95,'2026-04-17T02:00:17.353498-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-16", "calories": 1574.0, "protein_g": 168.0}',NULL);
+INSERT INTO events VALUES(96,'2026-04-17T02:00:20.645026-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-17", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(97,'2026-04-17T02:00:21.302392-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-17", "calories": 1055.0, "protein_g": 155.0}',NULL);
+INSERT INTO events VALUES(98,'2026-04-17T11:00:02.994890-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-16", "weight_lbs": 172.0, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(99,'2026-04-17T11:00:10.304070-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-16", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(100,'2026-04-17T11:00:11.220030-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-16", "calories": 1574.0, "protein_g": 168.0}',NULL);
+INSERT INTO events VALUES(101,'2026-04-17T11:00:11.949430-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-17", "weight_lbs": 173.1, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(102,'2026-04-17T11:00:14.414684-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-17", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(103,'2026-04-17T11:00:14.958425-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-17", "calories": 992.0, "protein_g": 130.0}',NULL);
+INSERT INTO events VALUES(104,'2026-04-17T16:00:02.750319-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-16", "weight_lbs": 172.0, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(105,'2026-04-17T16:00:07.724204-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-16", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(106,'2026-04-17T16:00:08.042526-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-16", "calories": 1574.0, "protein_g": 168.0}',NULL);
+INSERT INTO events VALUES(107,'2026-04-17T16:00:11.887035-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-17", "weight_lbs": 173.1, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(108,'2026-04-17T16:00:13.179640-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-17", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(109,'2026-04-17T16:00:13.474639-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-17", "calories": 1348.0, "protein_g": 190.0}',NULL);
+INSERT INTO events VALUES(110,'2026-04-18T02:00:07.799174-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-17", "weight_lbs": 173.1, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(111,'2026-04-18T02:00:13.058205-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-17", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(112,'2026-04-18T02:00:17.247338-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-18", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(113,'2026-04-18T02:00:17.792847-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-18", "calories": 1170.0, "protein_g": 180.0}',NULL);
+INSERT INTO events VALUES(114,'2026-04-18T10:00:02.335899-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-17", "weight_lbs": 173.1, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(115,'2026-04-18T10:00:06.077129-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-17", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(116,'2026-04-18T10:00:07.655220-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-17", "calories": 2163.0, "protein_g": 228.0}',NULL);
+INSERT INTO events VALUES(117,'2026-04-18T10:00:08.063698-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-18", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(118,'2026-04-18T10:00:11.194656-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-18", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(119,'2026-04-18T10:00:11.640774-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-18", "calories": 1225.0, "protein_g": 155.0}',NULL);
+INSERT INTO events VALUES(120,'2026-04-18T11:00:02.597413-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-17", "weight_lbs": 173.1, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(121,'2026-04-18T11:00:08.335398-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-17", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(122,'2026-04-18T11:00:08.628619-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-17", "calories": 2163.0, "protein_g": 228.0}',NULL);
+INSERT INTO events VALUES(123,'2026-04-18T11:00:09.025976-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-18", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(124,'2026-04-18T11:00:11.009500-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-18", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(125,'2026-04-18T11:00:11.228067-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-18", "calories": 1225.0, "protein_g": 155.0}',NULL);
+INSERT INTO events VALUES(126,'2026-04-18T16:00:05.812536-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-17", "weight_lbs": 173.1, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(127,'2026-04-18T16:00:08.583774-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-17", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(128,'2026-04-18T16:00:09.354438-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-17", "calories": 2163.0, "protein_g": 228.0}',NULL);
+INSERT INTO events VALUES(129,'2026-04-18T16:00:09.989346-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-18", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(130,'2026-04-18T16:00:11.381251-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-18", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(131,'2026-04-18T16:00:12.955439-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-18", "calories": 1673.0, "protein_g": 154.0}',NULL);
+INSERT INTO events VALUES(132,'2026-04-19T02:00:03.153835-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-18", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(133,'2026-04-19T02:00:07.376369-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-18", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(134,'2026-04-19T02:00:08.538688-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-18", "calories": 2474.0, "protein_g": 187.0}',NULL);
+INSERT INTO events VALUES(135,'2026-04-19T02:00:14.509666-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-19", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(136,'2026-04-19T02:00:16.711065-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-19", "calories": 752.0, "protein_g": 138.0}',NULL);
+INSERT INTO events VALUES(137,'2026-04-19T10:00:03.791134-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-18", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(138,'2026-04-19T10:00:07.731610-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-18", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(139,'2026-04-19T10:00:08.354422-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-18", "calories": 2474.0, "protein_g": 187.0}',NULL);
+INSERT INTO events VALUES(140,'2026-04-19T10:00:13.240431-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-19", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(141,'2026-04-19T10:00:18.441863-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-19", "calories": 752.0, "protein_g": 138.0}',NULL);
+INSERT INTO events VALUES(142,'2026-04-19T11:00:02.976812-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-18", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(143,'2026-04-19T11:00:05.189899-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-18", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(144,'2026-04-19T11:00:05.631238-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-18", "calories": 2474.0, "protein_g": 187.0}',NULL);
+INSERT INTO events VALUES(145,'2026-04-19T11:00:06.209839-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-19", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(146,'2026-04-19T11:00:07.771157-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-19", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(147,'2026-04-19T11:00:08.367643-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-19", "calories": 752.0, "protein_g": 138.0}',NULL);
+INSERT INTO events VALUES(148,'2026-04-19T16:00:03.489924-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-18", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(149,'2026-04-19T16:00:05.488021-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-18", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(150,'2026-04-19T16:00:07.087074-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-18", "calories": 2474.0, "protein_g": 187.0}',NULL);
+INSERT INTO events VALUES(151,'2026-04-19T16:00:07.539869-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-19", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(152,'2026-04-19T16:00:09.275024-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-19", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(153,'2026-04-19T16:00:10.657647-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-19", "calories": 1474.0, "protein_g": 42.0}',NULL);
+INSERT INTO events VALUES(154,'2026-04-20T02:00:03.382927-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-19", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(155,'2026-04-20T02:00:10.964488-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-19", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(156,'2026-04-20T02:00:11.689556-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-19", "calories": 1474.0, "protein_g": 42.0}',NULL);
+INSERT INTO events VALUES(157,'2026-04-20T02:00:16.767976-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-20", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(158,'2026-04-20T10:00:03.241286-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-19", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(159,'2026-04-20T10:00:08.340570-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-19", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(160,'2026-04-20T10:00:12.082426-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-19", "calories": 1474.0, "protein_g": 42.0}',NULL);
+INSERT INTO events VALUES(161,'2026-04-20T10:00:13.255046-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-20", "weight_lbs": 176.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(162,'2026-04-20T10:00:15.743288-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-20", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(163,'2026-04-20T11:00:03.347207-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-19", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(164,'2026-04-20T11:00:05.773781-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-19", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(165,'2026-04-20T11:00:09.345125-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-19", "calories": 1474.0, "protein_g": 42.0}',NULL);
+INSERT INTO events VALUES(166,'2026-04-20T11:00:09.635460-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-20", "weight_lbs": 174.8, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(167,'2026-04-20T11:00:11.282651-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-20", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(168,'2026-04-20T11:00:11.706986-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-20", "calories": 550.0, "protein_g": 23.0}',NULL);
+INSERT INTO events VALUES(169,'2026-04-20T16:00:02.441422-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-19", "weight_lbs": 175.9, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(170,'2026-04-20T16:00:05.335861-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-19", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(171,'2026-04-20T16:00:11.218164-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-19", "calories": 1474.0, "protein_g": 42.0}',NULL);
+INSERT INTO events VALUES(172,'2026-04-20T16:00:11.714448-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-20", "weight_lbs": 174.8, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(173,'2026-04-20T16:00:15.851682-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-20", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(174,'2026-04-20T16:00:16.162513-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-20", "calories": 2435.0, "protein_g": 140.0}',NULL);
+INSERT INTO events VALUES(175,'2026-04-21T02:00:03.394194-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-20", "weight_lbs": 174.8, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(176,'2026-04-21T02:00:06.085638-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-20", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(177,'2026-04-21T02:00:07.013096-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-20", "calories": 2825.0, "protein_g": 146.0}',NULL);
+INSERT INTO events VALUES(178,'2026-04-21T02:00:12.673195-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-21", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(179,'2026-04-21T10:00:04.373683-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-20", "weight_lbs": 174.8, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(180,'2026-04-21T10:00:08.476929-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-20", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(181,'2026-04-21T10:00:09.304176-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-20", "calories": 2825.0, "protein_g": 146.0}',NULL);
+INSERT INTO events VALUES(182,'2026-04-21T10:00:12.075694-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-21", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(183,'2026-04-21T10:00:12.626157-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-21", "calories": 400.0, "protein_g": 3.0}',NULL);
+INSERT INTO events VALUES(184,'2026-04-21T11:00:02.177399-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-20", "weight_lbs": 174.8, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(185,'2026-04-21T11:00:04.212068-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-20", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(186,'2026-04-21T11:00:04.473006-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-20", "calories": 2825.0, "protein_g": 146.0}',NULL);
+INSERT INTO events VALUES(187,'2026-04-21T11:00:06.172881-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-21", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(188,'2026-04-21T11:00:08.419807-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-21", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(189,'2026-04-21T11:00:08.873915-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-21", "calories": 570.0, "protein_g": 23.0}',NULL);
+INSERT INTO events VALUES(190,'2026-04-21T16:00:03.068326-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-20", "weight_lbs": 174.8, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(191,'2026-04-21T16:00:08.616006-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-20", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(192,'2026-04-21T16:00:08.858314-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-20", "calories": 2825.0, "protein_g": 146.0}',NULL);
+INSERT INTO events VALUES(193,'2026-04-21T16:00:10.033806-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-21", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(194,'2026-04-21T16:00:11.628898-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-21", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(195,'2026-04-21T16:00:13.430628-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-21", "calories": 570.0, "protein_g": 23.0}',NULL);
+INSERT INTO events VALUES(196,'2026-04-22T02:00:03.201001-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-21", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(197,'2026-04-22T02:00:06.340928-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-21", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(198,'2026-04-22T02:00:07.694027-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-21", "calories": 730.0, "protein_g": 48.0}',NULL);
+INSERT INTO events VALUES(199,'2026-04-22T02:00:12.519663-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(200,'2026-04-22T10:00:07.695330-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-21", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(201,'2026-04-22T10:00:10.571403-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-21", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(202,'2026-04-22T10:00:11.251167-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-21", "calories": 730.0, "protein_g": 48.0}',NULL);
+INSERT INTO events VALUES(203,'2026-04-22T10:00:14.615506-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(204,'2026-04-22T11:00:03.772681-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-21", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(205,'2026-04-22T11:00:05.511067-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-21", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(206,'2026-04-22T11:00:05.772635-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-21", "calories": 730.0, "protein_g": 48.0}',NULL);
+INSERT INTO events VALUES(207,'2026-04-22T11:00:08.463901-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-22", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(208,'2026-04-22T11:00:11.802793-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(209,'2026-04-22T16:00:04.264785-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-21", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(210,'2026-04-22T16:00:08.313989-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-21", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(211,'2026-04-22T16:00:09.287019-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-21", "calories": 730.0, "protein_g": 48.0}',NULL);
+INSERT INTO events VALUES(212,'2026-04-22T16:00:09.640720-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-22", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(213,'2026-04-22T16:00:12.664054-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(214,'2026-04-22T16:00:12.894561-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-22", "calories": 780.0, "protein_g": 53.0}',NULL);
+INSERT INTO events VALUES(215,'2026-04-23T02:00:05.302413-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-22", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(216,'2026-04-23T02:00:10.614416-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(217,'2026-04-23T02:00:11.957661-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-22", "calories": 1984.0, "protein_g": 116.0}',NULL);
+INSERT INTO events VALUES(218,'2026-04-23T02:00:16.612470-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(219,'2026-04-23T10:00:03.758178-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-22", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(220,'2026-04-23T10:00:09.044608-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(221,'2026-04-23T10:00:09.838350-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-22", "calories": 1984.0, "protein_g": 116.0}',NULL);
+INSERT INTO events VALUES(222,'2026-04-23T10:00:13.655166-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(223,'2026-04-23T11:00:03.079476-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-22", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(224,'2026-04-23T11:00:05.393429-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(225,'2026-04-23T11:00:08.827042-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-22", "calories": 1984.0, "protein_g": 116.0}',NULL);
+INSERT INTO events VALUES(226,'2026-04-23T11:00:11.115926-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(227,'2026-04-23T16:00:01.663835-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-22", "weight_lbs": 174.4, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(228,'2026-04-23T16:00:04.008216-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-22", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(229,'2026-04-23T16:00:07.700355-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-22", "calories": 1984.0, "protein_g": 116.0}',NULL);
+INSERT INTO events VALUES(230,'2026-04-23T16:00:09.580729-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(231,'2026-04-23T16:00:11.903636-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-23", "calories": 170.0, "protein_g": 20.0}',NULL);
+INSERT INTO events VALUES(232,'2026-04-24T02:00:13.805990-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(233,'2026-04-24T02:00:15.515683-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-23", "calories": 1340.0, "protein_g": 39.0}',NULL);
+INSERT INTO events VALUES(234,'2026-04-24T02:00:18.585226-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(235,'2026-04-24T10:00:07.938664-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(236,'2026-04-24T10:00:09.873287-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-23", "calories": 1340.0, "protein_g": 39.0}',NULL);
+INSERT INTO events VALUES(237,'2026-04-24T10:00:10.601373-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-24", "weight_lbs": 176.6, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(238,'2026-04-24T10:00:17.941358-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(239,'2026-04-24T11:00:07.961396-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(240,'2026-04-24T11:00:08.677179-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-23", "calories": 1340.0, "protein_g": 39.0}',NULL);
+INSERT INTO events VALUES(241,'2026-04-24T11:00:08.858407-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-24", "weight_lbs": 176.6, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(242,'2026-04-24T11:00:12.043160-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(243,'2026-04-24T16:00:04.706031-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(244,'2026-04-24T16:00:07.413828-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-23", "calories": 1340.0, "protein_g": 39.0}',NULL);
+INSERT INTO events VALUES(245,'2026-04-24T16:00:09.082221-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-24", "weight_lbs": 176.6, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(246,'2026-04-24T16:00:10.648042-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(247,'2026-04-25T02:00:07.414313-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(248,'2026-04-25T02:00:11.433605-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-24", "calories": 2079.0, "protein_g": 138.0}',NULL);
+INSERT INTO events VALUES(249,'2026-04-25T02:00:15.884439-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(250,'2026-04-25T10:00:03.902617-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-24", "weight_lbs": 176.6, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(251,'2026-04-25T10:00:07.255687-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(252,'2026-04-25T10:00:08.679906-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-24", "calories": 2079.0, "protein_g": 138.0}',NULL);
+INSERT INTO events VALUES(253,'2026-04-25T10:00:09.291013-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-25", "weight_lbs": 177.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(254,'2026-04-25T10:00:13.657401-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(255,'2026-04-25T11:00:06.232217-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-24", "weight_lbs": 176.6, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(256,'2026-04-25T11:00:09.625582-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(257,'2026-04-25T11:00:11.884656-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-24", "calories": 2079.0, "protein_g": 138.0}',NULL);
+INSERT INTO events VALUES(258,'2026-04-25T11:00:12.389835-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-25", "weight_lbs": 177.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(259,'2026-04-25T11:00:15.282589-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(260,'2026-04-25T11:00:15.551637-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-25", "calories": 44.0, "protein_g": 1.0}',NULL);
+INSERT INTO events VALUES(261,'2026-04-25T16:00:03.651068-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-24", "weight_lbs": 176.6, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(262,'2026-04-25T16:00:06.721609-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(263,'2026-04-25T16:00:08.220946-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-24", "calories": 2079.0, "protein_g": 138.0}',NULL);
+INSERT INTO events VALUES(264,'2026-04-25T16:00:08.802800-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-25", "weight_lbs": 177.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(265,'2026-04-25T16:00:10.373468-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(266,'2026-04-25T16:00:10.687172-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-25", "calories": 797.0, "protein_g": 12.0}',NULL);
+INSERT INTO events VALUES(267,'2026-04-26T02:00:13.767680-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(268,'2026-04-26T02:00:17.679468-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-25", "calories": 797.0, "protein_g": 12.0}',NULL);
+INSERT INTO events VALUES(269,'2026-04-26T02:00:20.790433-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-26", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(270,'2026-04-26T10:00:03.639057-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-25", "weight_lbs": 177.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(271,'2026-04-26T10:00:06.969198-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(272,'2026-04-26T10:00:09.092503-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-25", "calories": 797.0, "protein_g": 12.0}',NULL);
+INSERT INTO events VALUES(273,'2026-04-26T10:00:09.821867-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-26", "weight_lbs": 175.3, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(274,'2026-04-26T10:00:12.222065-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-26", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(275,'2026-04-26T10:00:13.301160-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-26", "calories": 826.0, "protein_g": 108.0}',NULL);
+INSERT INTO events VALUES(276,'2026-04-26T11:00:04.872377-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-25", "weight_lbs": 177.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(277,'2026-04-26T11:00:09.354151-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(278,'2026-04-26T11:00:11.446432-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-25", "calories": 797.0, "protein_g": 12.0}',NULL);
+INSERT INTO events VALUES(279,'2026-04-26T11:00:11.882095-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-26", "weight_lbs": 175.3, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(280,'2026-04-26T11:00:15.622865-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-26", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(281,'2026-04-26T11:00:15.902911-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-26", "calories": 826.0, "protein_g": 108.0}',NULL);
+INSERT INTO events VALUES(282,'2026-04-26T16:00:08.041884-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-25", "weight_lbs": 177.5, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(283,'2026-04-26T16:00:09.578086-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-25", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(284,'2026-04-26T16:00:10.860081-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-25", "calories": 797.0, "protein_g": 12.0}',NULL);
+INSERT INTO events VALUES(285,'2026-04-26T16:00:11.571577-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-26", "weight_lbs": 175.3, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(286,'2026-04-26T16:00:14.376455-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-26", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(287,'2026-04-26T16:00:16.315035-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-26", "calories": 1243.0, "protein_g": 171.0}',NULL);
+DELETE FROM sqlite_sequence;
+INSERT INTO sqlite_sequence VALUES('workout',30);
+INSERT INTO sqlite_sequence VALUES('cardio',3);
+INSERT INTO sqlite_sequence VALUES('events',287);
+CREATE INDEX idx_workout_date       ON workout(date);
+CREATE INDEX idx_workout_exercise   ON workout(exercise);
+CREATE INDEX idx_workout_date_ex    ON workout(date, exercise);
+CREATE INDEX idx_cardio_date ON cardio(date);
+CREATE INDEX idx_routine_active ON routine(effective_from, effective_to);
+CREATE INDEX idx_events_ts    ON events(ts);
+CREATE INDEX idx_events_kind  ON events(kind);
+CREATE VIEW latest_body_scan AS
+SELECT * FROM body_scan ORDER BY date DESC LIMIT 1;
+CREATE VIEW latest_weight AS
+SELECT * FROM body_metrics ORDER BY date DESC LIMIT 1;
+CREATE VIEW active_routine AS
+SELECT * FROM routine
+WHERE effective_to IS NULL
+   OR effective_to >= date('now');
+COMMIT;
