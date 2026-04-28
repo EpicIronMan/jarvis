@@ -605,37 +605,4 @@ INSERT INTO events VALUES(305,'2026-04-27T16:00:08.292694-04:00','handler_call',
 INSERT INTO events VALUES(306,'2026-04-27T16:00:10.113360-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-27", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(307,'2026-04-27T16:00:11.357731-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-27", "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(308,'2026-04-27T16:00:13.188805-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-27", "calories": 1111.0, "protein_g": 77.0}',NULL);
-INSERT INTO events VALUES(309,'2026-04-28T02:00:05.129253-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-27", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(310,'2026-04-28T02:00:14.539512-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-27", "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(311,'2026-04-28T02:00:15.489856-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-27", "calories": 3632.0, "protein_g": 168.0}',NULL);
-INSERT INTO events VALUES(312,'2026-04-28T02:00:18.373193-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-28", "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(313,'2026-04-28T10:00:02.755860-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-27", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(314,'2026-04-28T10:00:04.763704-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-27", "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(315,'2026-04-28T10:00:05.864105-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-27", "calories": 3632.0, "protein_g": 168.0}',NULL);
-INSERT INTO events VALUES(316,'2026-04-28T10:00:06.275409-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-28", "weight_lbs": 174.2, "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(317,'2026-04-28T10:00:08.134549-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-28", "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(318,'2026-04-28T11:00:02.908466-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-27", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(319,'2026-04-28T11:00:05.171484-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-27", "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(320,'2026-04-28T11:00:05.631902-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-27", "calories": 3632.0, "protein_g": 168.0}',NULL);
-INSERT INTO events VALUES(321,'2026-04-28T11:00:06.359967-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-28", "weight_lbs": 174.2, "source": "FITBIT"}',NULL);
-INSERT INTO events VALUES(322,'2026-04-28T11:00:10.205441-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-28", "source": "FITBIT"}',NULL);
-DELETE FROM sqlite_sequence;
-INSERT INTO sqlite_sequence VALUES('workout',30);
-INSERT INTO sqlite_sequence VALUES('cardio',3);
-INSERT INTO sqlite_sequence VALUES('events',322);
-CREATE INDEX idx_workout_date       ON workout(date);
-CREATE INDEX idx_workout_exercise   ON workout(exercise);
-CREATE INDEX idx_workout_date_ex    ON workout(date, exercise);
-CREATE INDEX idx_cardio_date ON cardio(date);
-CREATE INDEX idx_routine_active ON routine(effective_from, effective_to);
-CREATE INDEX idx_events_ts    ON events(ts);
-CREATE INDEX idx_events_kind  ON events(kind);
-CREATE VIEW latest_body_scan AS
-SELECT * FROM body_scan ORDER BY date DESC LIMIT 1;
-CREATE VIEW latest_weight AS
-SELECT * FROM body_metrics ORDER BY date DESC LIMIT 1;
-CREATE VIEW active_routine AS
-SELECT * FROM routine
-WHERE effective_to IS NULL
-   OR effective_to >= date('now');
-COMMIT;
+INSERT INTO events VALUES(309,'2026-04-28T02:00:05.129253-04:00',
