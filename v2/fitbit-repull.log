@@ -400,3 +400,23 @@
 2026-04-28 10:00:08,137 INFO Pulling nutrition data for 2026-04-28
 2026-04-28 10:00:08,589 INFO No nutrition data for 2026-04-28
 2026-04-28 10:00:08,590 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-04-29 10:00:02,591 INFO === Fitbit sync (v2/SQLite) starting for 2026-04-28 ===
+2026-04-29 10:00:02,595 INFO Pulling body metrics for 2026-04-28
+2026-04-29 10:00:03,410 INFO Body metrics written: {'action': 'log_weight', 'date': '2026-04-28', 'weight_lbs': 174.2, 'weight_kg': 79.0, 'bmi': 26.86}
+2026-04-29 10:00:03,411 INFO Pulling sleep data for 2026-04-28
+2026-04-29 10:00:04,034 INFO No sleep data for 2026-04-28
+2026-04-29 10:00:04,035 INFO Pulling activity data for 2026-04-28
+2026-04-29 10:00:05,299 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-04-28', 'source': 'FITBIT'}
+2026-04-29 10:00:05,300 INFO Pulling nutrition data for 2026-04-28
+2026-04-29 10:00:05,696 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-04-28', 'calories': 1890.0, 'protein_g': 129.0}
+2026-04-29 10:00:05,697 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-04-29 10:00:05,697 INFO === Fitbit sync (v2/SQLite) starting for 2026-04-29 ===
+2026-04-29 10:00:05,697 INFO Pulling body metrics for 2026-04-29
+2026-04-29 10:00:06,289 INFO Body metrics written: {'action': 'log_weight', 'date': '2026-04-29', 'weight_lbs': 173.5, 'weight_kg': 78.7, 'bmi': 26.75}
+2026-04-29 10:00:06,289 INFO Pulling sleep data for 2026-04-29
+2026-04-29 10:00:06,704 INFO No sleep data for 2026-04-29
+2026-04-29 10:00:06,704 INFO Pulling activity data for 2026-04-29
+2026-04-29 10:00:08,001 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-04-29', 'source': 'FITBIT'}
+2026-04-29 10:00:08,001 INFO Pulling nutrition data for 2026-04-29
+2026-04-29 10:00:08,243 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-04-29', 'calories': 280.0, 'protein_g': 5.0}
+2026-04-29 10:00:08,244 INFO === Fitbit sync (v2/SQLite) complete ===
