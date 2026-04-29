@@ -62,7 +62,7 @@ INSERT INTO body_metrics VALUES('2026-04-24',176.599999999999994,80.099999999999
 INSERT INTO body_metrics VALUES('2026-04-25',177.5,80.5,22.3000000000000007,NULL,NULL,27.3700000000000009,'FITBIT','synced 16:00 ET');
 INSERT INTO body_metrics VALUES('2026-04-26',175.300000000000011,79.5,21.8000000000000007,NULL,NULL,27.0300000000000011,'FITBIT','synced 16:00 ET');
 INSERT INTO body_metrics VALUES('2026-04-27',173.5,78.7000000000000028,21.3999999999999985,NULL,NULL,26.75,'FITBIT','synced 16:00 ET');
-INSERT INTO body_metrics VALUES('2026-04-28',174.199999999999988,79.0,21.6000000000000014,NULL,NULL,26.8599999999999994,'FITBIT','synced 11:00 ET');
+INSERT INTO body_metrics VALUES('2026-04-28',174.199999999999988,79.0,21.6000000000000014,NULL,NULL,26.8599999999999994,'FITBIT','synced 16:00 ET');
 INSERT INTO body_metrics VALUES('2026-04-29',173.5,78.7000000000000028,21.3999999999999985,NULL,NULL,26.75,'FITBIT','synced 11:00 ET');
 CREATE TABLE body_scan (
     date                        TEXT    PRIMARY KEY,  -- YYYY-MM-DD
@@ -645,10 +645,11 @@ INSERT INTO events VALUES(341,'2026-04-29T11:00:08.488537-04:00','handler_call',
 INSERT INTO events VALUES(342,'2026-04-29T11:00:09.168912-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-29", "weight_lbs": 173.5, "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(343,'2026-04-29T11:00:11.706341-04:00','handler_call','{"handler": "log_recovery", "date": "2026-04-29", "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(344,'2026-04-29T11:00:12.257232-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-04-29", "calories": 280.0, "protein_g": 5.0}',NULL);
+INSERT INTO events VALUES(345,'2026-04-29T16:00:01.693228-04:00','handler_call','{"handler": "log_weight", "date": "2026-04-28", "weight_lbs": 174.2, "source": "FITBIT"}',NULL);
 DELETE FROM sqlite_sequence;
 INSERT INTO sqlite_sequence VALUES('workout',30);
 INSERT INTO sqlite_sequence VALUES('cardio',3);
-INSERT INTO sqlite_sequence VALUES('events',344);
+INSERT INTO sqlite_sequence VALUES('events',345);
 CREATE INDEX idx_workout_date       ON workout(date);
 CREATE INDEX idx_workout_exercise   ON workout(exercise);
 CREATE INDEX idx_workout_date_ex    ON workout(date, exercise);
