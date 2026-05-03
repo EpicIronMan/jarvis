@@ -53,7 +53,7 @@ def check_no_training(conn, today_d) -> str | None:
     """Alert if no workout in 2+ days."""
     two_days_ago = (today_d - timedelta(days=2)).isoformat()
     row = conn.execute(
-        "SELECT MAX(date) as last_date FROM workout"
+        "SELECT MAX(date) as last_date FROM workout_session"
     ).fetchone()
     if not row or not row[0]:
         return None

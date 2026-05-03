@@ -22,7 +22,7 @@ All data lives in SQLite (v2/lifeos.db). Use query_data tool when you need speci
 - **Lean mass** → body_scan table (latest DEXA)
 - **Protein target** → calculated from latest DEXA lean mass (1.2-1.4g per lb)
 - **Current weight** → body_metrics table (latest row)
-- **Training history** → workout table
+- **Training history** → workout_session (per-session) + workout_set (per-set) tables. Primary source is Hevy (auto-ingested via webhook); Telegram shorthand is the fallback. Per-exercise summaries returned by training queries aggregate sets/reps/weight from the underlying set rows.
 - **Nutrition** → nutrition table
 - **Cardio** → cardio table
 - **Recovery/Sleep** → recovery table
@@ -37,14 +37,17 @@ If latest data seems stale (missing today's weight, sleep, etc.), call sync_fitb
 
 ## Workout Logging
 
-The user logs via shorthand:
+The user uses **Hevy** (mobile app) as the primary workout logger. Workouts auto-ingest via webhook within seconds of finishing in the app — no action needed from you. Source field on these sessions is `HEVY`.
+
+Telegram shorthand is the fallback when Hevy isn't being used:
 - bench 275x5x3 = bench press, 275 lbs, 5 reps, 3 sets
 - squat 315x3x5 @8 = squat, 315 lbs, 3 reps, 5 sets, RPE 8
 
-Simple shorthand is parsed automatically by the router. For complex entries, use the log_workout tool.
+Simple shorthand is parsed by the router. For complex entries use log_workout. Source on these is `TELEGRAM`.
 
-**Varying reps** (e.g. 8/5/8): log one row per set. Uniform reps (e.g. 3x8): log one row.
 **Unilateral exercises:** log as "Exercise Left" and "Exercise Right" separately.
+
+When asked about workouts, query training_latest / training_on_date / last_session_of_exercise as before — they return per-exercise summaries regardless of source.
 
 ## Cardio Logging
 

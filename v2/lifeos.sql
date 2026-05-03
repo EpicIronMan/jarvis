@@ -7,6 +7,7 @@ CREATE TABLE schema_version (
 ) STRICT;
 INSERT INTO schema_version VALUES(1,'2026-04-11','Phase 0 initial schema');
 INSERT INTO schema_version VALUES(2,'2026-05-03','Hevy migration Phase 0: workout_session + workout_set (per-set granularity). Old workout table retained until Phase 3.');
+INSERT INTO schema_version VALUES(3,'2026-05-03','Hevy migration Phase 3: handlers cut over, old workout table dropped.');
 CREATE TABLE body_metrics (
     date            TEXT    PRIMARY KEY,              -- YYYY-MM-DD
     weight_lbs      REAL,
@@ -155,47 +156,6 @@ INSERT INTO nutrition VALUES('2026-04-29',1981.0,134.0,169.0,84.0,8.0,4860.0,'FI
 INSERT INTO nutrition VALUES('2026-04-30',1077.0,31.0,86.0,71.0,32.0,462.0,'FITBIT','synced 16:00 ET');
 INSERT INTO nutrition VALUES('2026-05-02',2210.0,184.0,260.0,48.0,22.0,2794.0,'FITBIT','synced 16:00 ET');
 INSERT INTO nutrition VALUES('2026-05-03',916.0,36.0,107.0,40.0,8.0,2082.0,'FITBIT','synced 16:00 ET');
-CREATE TABLE workout (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    date          TEXT    NOT NULL,
-    exercise      TEXT    NOT NULL,
-    sets          INTEGER NOT NULL,
-    reps          INTEGER NOT NULL,
-    weight_lbs    REAL    NOT NULL,                    -- 0 OK for bodyweight
-    rpe           REAL,                                  -- nullable; RPE 0–10
-    volume_lbs    REAL,                                  -- stored (not computed) to match sheet
-    session_type  TEXT,                                  -- BRO_SPLIT_LEGS, UPPER, etc.
-    source        TEXT    NOT NULL,                      -- TELEGRAM | MANUAL
-    notes         TEXT
-) STRICT;
-INSERT INTO workout VALUES(1,'2026-04-04','Leg Press',3,8,320.0,NULL,7680.0,'Legs & Abs','TELEGRAM',NULL);
-INSERT INTO workout VALUES(2,'2026-04-04','Leg Extension',3,8,135.0,NULL,3240.0,'Legs & Abs','TELEGRAM',NULL);
-INSERT INTO workout VALUES(3,'2026-04-04','Captain Chair',3,8,8.0,NULL,192.0,'Legs & Abs','TELEGRAM',NULL);
-INSERT INTO workout VALUES(4,'2026-04-06','Pull Ups',1,7,174.199999999999988,NULL,1219.40000000000009,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(5,'2026-04-06','Lat Pull Downs',1,8,160.0,NULL,1280.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(6,'2026-04-06','Lat Pull Downs',1,5,160.0,NULL,800.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(7,'2026-04-06','Lat Pull Downs',1,8,160.0,NULL,1280.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(8,'2026-04-06','Reverse Pec Fly',1,10,115.0,NULL,1150.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(9,'2026-04-06','Reverse Pec Fly',1,7,115.0,NULL,805.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(10,'2026-04-06','Reverse Pec Fly',1,4,115.0,NULL,460.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(11,'2026-04-06','Preacher Dumbbell Curls Left',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(12,'2026-04-06','Preacher Dumbbell Curls Right',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(13,'2026-04-07','Incline Dumbbell Press',3,3,50.0,NULL,450.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(14,'2026-04-07','Single Arm Cable Lateral Raise',3,10,12.5,NULL,375.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(15,'2026-04-07','Seated Pec Fly Machine',3,8,130.0,NULL,3120.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(16,'2026-04-07','Shoulder Press Machine',3,6,80.0,NULL,1440.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(17,'2026-04-08','Leg Press',3,8,320.0,NULL,7680.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(18,'2026-04-08','Leg Curl',3,10,100.0,NULL,3000.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(19,'2026-04-08','Leg Extension',3,10,140.0,NULL,4200.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(20,'2026-04-08','Weighted Captain Chair',3,10,8.0,NULL,240.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(21,'2026-04-09','Pull Ups',7,1,172.800000000000011,NULL,1209.5999999999999,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(22,'2026-04-09','Lat Pulldown',3,8,160.0,NULL,3840.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(23,'2026-04-09','Seated Row Machine',3,10,85.0,NULL,2550.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(24,'2026-04-09','Reverse Pec Fly',3,8,100.0,NULL,2400.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(25,'2026-04-09','Preacher Dumbbell Curls Left',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(26,'2026-04-09','Preacher Dumbbell Curls Right',3,10,25.0,NULL,750.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(27,'2026-04-11','Seated Leg Press',3,10,320.0,NULL,9600.0,'BRO_SPLIT','TELEGRAM',NULL);
-INSERT INTO workout VALUES(28,'2026-04-11','Weighted Captain Chair',3,10,10.0,NULL,300.0,'BRO_SPLIT','TELEGRAM',NULL);
 CREATE TABLE cardio (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     date           TEXT    NOT NULL,
@@ -771,6 +731,8 @@ INSERT INTO workout_session VALUES(15,'574806a1-2951-44bc-8a74-ec2ed593e0d4','20
 INSERT INTO workout_session VALUES(16,'f934d969-7a0c-4ec4-bdea-a8188e4427c9','2026-04-14','2026-04-15T00:05:39+00:00','2026-04-15T01:05:39+00:00','Chest & Shoulder - Tues, Fri','','HEVY','{"id": "f934d969-7a0c-4ec4-bdea-a8188e4427c9", "title": "Chest & Shoulder - Tues, Fri", "routine_id": "af50ef54-5d41-4335-8607-ddbb9b0ee150", "description": "", "start_time": "2026-04-15T00:05:39+00:00", "end_time": "2026-04-15T01:05:39+00:00", "updated_at": "2026-04-15T01:05:41.154Z", "created_at": "2026-04-15T01:05:41.154Z", "exercises": [{"index": 0, "title": "Treadmill", "notes": "", "exercise_template_id": "243710DE", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": null, "reps": null, "distance_meters": 7000, "duration_seconds": 3600, "rpe": null, "custom_metric": null}]}]}');
 INSERT INTO workout_session VALUES(17,'193e248f-2f62-4a5c-83fe-c9364b9249c5','2026-04-14','2026-04-14T16:17:56+00:00','2026-04-14T16:56:31+00:00','Chest & Shoulder - Tues, Fri','','HEVY','{"id": "193e248f-2f62-4a5c-83fe-c9364b9249c5", "title": "Chest & Shoulder - Tues, Fri", "routine_id": "af50ef54-5d41-4335-8607-ddbb9b0ee150", "description": "", "start_time": "2026-04-14T16:17:56+00:00", "end_time": "2026-04-14T16:56:31+00:00", "updated_at": "2026-04-14T16:56:33.926Z", "created_at": "2026-04-14T16:56:33.926Z", "exercises": [{"index": 0, "title": "Incline Bench Press (Dumbbell)", "notes": "", "exercise_template_id": "07B38369", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": 22.67964547178199, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 1, "type": "normal", "weight_kg": 22.67964547178199, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 2, "type": "normal", "weight_kg": 22.67964547178199, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}, {"index": 1, "title": "Chest Fly (Machine)", "notes": "", "exercise_template_id": "78683336", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": 45.35929094356398, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 1, "type": "normal", "weight_kg": 45.35929094356398, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 2, "type": "normal", "weight_kg": 45.35929094356398, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}, {"index": 2, "title": "Single Arm Lateral Raise (Cable)", "notes": "", "exercise_template_id": "DE68C825", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": 5.443114913227677, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 1, "type": "normal", "weight_kg": 5.443114913227677, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 2, "type": "normal", "weight_kg": 5.443114913227677, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}, {"index": 3, "title": "Seated Shoulder Press (Machine)", "notes": "", "exercise_template_id": "9237BAD1", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": 31.75150366049478, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 1, "type": "normal", "weight_kg": 31.75150366049478, "reps": 6, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 2, "type": "normal", "weight_kg": 0, "reps": 6, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}]}');
 INSERT INTO workout_session VALUES(18,'bfc790e7-8659-43f7-98e0-e35dd73ec0ce','2026-04-13','2026-04-13T14:46:10+00:00','2026-04-13T16:35:52+00:00','Back & Arms - Mon, Thur','','HEVY','{"id": "bfc790e7-8659-43f7-98e0-e35dd73ec0ce", "title": "Back & Arms - Mon, Thur", "routine_id": "8cf1cfc3-ff82-4d9e-b04e-e3564208d3e9", "description": "", "start_time": "2026-04-13T14:46:10+00:00", "end_time": "2026-04-13T16:35:52+00:00", "updated_at": "2026-04-13T16:36:17.581Z", "created_at": "2026-04-13T16:36:17.581Z", "exercises": [{"index": 0, "title": "Pull Up", "notes": "", "exercise_template_id": "1B2B1E7C", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": null, "reps": 7, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}, {"index": 1, "title": "Lat Pulldown (Cable)", "notes": "", "exercise_template_id": "6A6C31A5", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": 72.57486550970236, "reps": 8, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 1, "type": "normal", "weight_kg": 72.57486550970236, "reps": 8, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 2, "type": "normal", "weight_kg": 72.57486550970236, "reps": 8, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}, {"index": 2, "title": "Seated Row (Machine)", "notes": "", "exercise_template_id": "1DF4A847", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": 38.55539730202938, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 1, "type": "normal", "weight_kg": 38.55539730202938, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 2, "type": "normal", "weight_kg": 38.55539730202938, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}, {"index": 3, "title": "Rear Delt Reverse Fly (Machine)", "notes": "", "exercise_template_id": "D8281C62", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": 54.43114913227677, "reps": 8, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 1, "type": "normal", "weight_kg": 54.43114913227677, "reps": 7, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 2, "type": "normal", "weight_kg": 54.43114913227677, "reps": 4, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 3, "type": "normal", "weight_kg": 38.55539730202938, "reps": 5, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}, {"index": 4, "title": "Preacher Curl (Dumbbell)", "notes": "", "exercise_template_id": "FAB6EB2F", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": 11.339822735890994, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 1, "type": "normal", "weight_kg": 11.339822735890994, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}, {"index": 2, "type": "normal", "weight_kg": 11.339822735890994, "reps": 10, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}, {"index": 5, "title": "Treadmill", "notes": "", "exercise_template_id": "243710DE", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": null, "reps": null, "distance_meters": 7000, "duration_seconds": 3600, "rpe": null, "custom_metric": null}]}]}');
+INSERT INTO workout_session VALUES(19,'9d006e16-a669-4cd2-bf97-593cf3d29a65','2026-05-03','2026-05-03T22:12:32+00:00','2026-05-03T22:12:37+00:00','Back & Arms - Mon, Thur','','HEVY','{"id": "9d006e16-a669-4cd2-bf97-593cf3d29a65", "title": "Back & Arms - Mon, Thur", "routine_id": "8cf1cfc3-ff82-4d9e-b04e-e3564208d3e9", "description": "", "start_time": "2026-05-03T22:12:32+00:00", "end_time": "2026-05-03T22:12:37+00:00", "updated_at": "2026-05-03T22:12:38.745Z", "created_at": "2026-05-03T22:12:38.745Z", "exercises": [{"index": 0, "title": "Pull Up", "notes": "", "exercise_template_id": "1B2B1E7C", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": null, "reps": 7, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}]}');
+INSERT INTO workout_session VALUES(20,'5fde9004-4d39-47b9-9cf8-bb626334c4a8','2026-05-03','2026-05-03T22:15:04+00:00','2026-05-03T22:15:17+00:00','Back & Arms - Mon, Thur','','HEVY','{"id": "5fde9004-4d39-47b9-9cf8-bb626334c4a8", "title": "Back & Arms - Mon, Thur", "routine_id": "8cf1cfc3-ff82-4d9e-b04e-e3564208d3e9", "description": "", "start_time": "2026-05-03T22:15:04+00:00", "end_time": "2026-05-03T22:15:17+00:00", "updated_at": "2026-05-03T22:15:18.902Z", "created_at": "2026-05-03T22:15:18.902Z", "exercises": [{"index": 0, "title": "Pull Up", "notes": "", "exercise_template_id": "1B2B1E7C", "superset_id": null, "sets": [{"index": 0, "type": "normal", "weight_kg": null, "reps": 7, "distance_meters": null, "duration_seconds": null, "rpe": null, "custom_metric": null}]}]}');
 CREATE TABLE workout_set (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id      INTEGER NOT NULL REFERENCES workout_session(id) ON DELETE CASCADE,
@@ -859,20 +821,6 @@ INSERT INTO workout_set VALUES(71,6,'Seated Leg Press',3,'normal',320.0,10,NULL,
 INSERT INTO workout_set VALUES(72,6,'Weighted Captain Chair',1,'normal',10.0,10,NULL,NULL,NULL,NULL,NULL);
 INSERT INTO workout_set VALUES(73,6,'Weighted Captain Chair',2,'normal',10.0,10,NULL,NULL,NULL,NULL,NULL);
 INSERT INTO workout_set VALUES(74,6,'Weighted Captain Chair',3,'normal',10.0,10,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(75,7,'Pull Up',1,'normal',NULL,7,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(76,7,'Lat Pulldown (Cable)',1,'normal',160.0,8,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(77,7,'Lat Pulldown (Cable)',2,'normal',160.0,8,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(78,7,'Lat Pulldown (Cable)',3,'normal',160.0,7,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(79,7,'Seated Row (Machine)',1,'normal',85.0,10,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(80,7,'Seated Row (Machine)',2,'normal',85.0,10,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(81,7,'Seated Row (Machine)',3,'normal',85.0,10,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(82,7,'Rear Delt Reverse Fly (Machine)',1,'normal',125.0,8,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(83,7,'Rear Delt Reverse Fly (Machine)',2,'normal',125.0,7,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(84,7,'Rear Delt Reverse Fly (Machine)',3,'normal',115.0,7,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(85,7,'Preacher Curl (Dumbbell)',1,'normal',25.0,10,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(86,7,'Preacher Curl (Dumbbell)',2,'normal',25.0,10,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(87,7,'Preacher Curl (Dumbbell)',3,'normal',25.0,10,NULL,NULL,NULL,NULL,NULL);
-INSERT INTO workout_set VALUES(88,7,'Treadmill',1,'normal',NULL,NULL,NULL,4.34959999999999968,3600,NULL,NULL);
 INSERT INTO workout_set VALUES(89,8,'Pull Up',1,'normal',NULL,5,NULL,NULL,NULL,NULL,NULL);
 INSERT INTO workout_set VALUES(90,8,'Lat Pulldown (Cable)',1,'normal',160.0,7,NULL,NULL,NULL,NULL,NULL);
 INSERT INTO workout_set VALUES(91,8,'Lat Pulldown (Cable)',2,'normal',160.0,5,NULL,NULL,NULL,NULL,NULL);
@@ -984,15 +932,27 @@ INSERT INTO workout_set VALUES(196,18,'Preacher Curl (Dumbbell)',1,'normal',25.0
 INSERT INTO workout_set VALUES(197,18,'Preacher Curl (Dumbbell)',2,'normal',25.0,10,NULL,NULL,NULL,NULL,NULL);
 INSERT INTO workout_set VALUES(198,18,'Preacher Curl (Dumbbell)',3,'normal',25.0,10,NULL,NULL,NULL,NULL,NULL);
 INSERT INTO workout_set VALUES(199,18,'Treadmill',1,'normal',NULL,NULL,NULL,4.34959999999999968,3600,NULL,NULL);
+INSERT INTO workout_set VALUES(200,7,'Pull Up',1,'normal',NULL,7,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(201,7,'Lat Pulldown (Cable)',1,'normal',160.0,8,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(202,7,'Lat Pulldown (Cable)',2,'normal',160.0,8,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(203,7,'Lat Pulldown (Cable)',3,'normal',160.0,7,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(204,7,'Seated Row (Machine)',1,'normal',85.0,10,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(205,7,'Seated Row (Machine)',2,'normal',85.0,10,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(206,7,'Seated Row (Machine)',3,'normal',85.0,10,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(207,7,'Rear Delt Reverse Fly (Machine)',1,'normal',125.0,8,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(208,7,'Rear Delt Reverse Fly (Machine)',2,'normal',125.0,7,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(209,7,'Rear Delt Reverse Fly (Machine)',3,'normal',115.0,7,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(210,7,'Preacher Curl (Dumbbell)',1,'normal',25.0,10,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(211,7,'Preacher Curl (Dumbbell)',2,'normal',25.0,10,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(212,7,'Preacher Curl (Dumbbell)',3,'normal',25.0,10,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(213,7,'Treadmill',1,'normal',NULL,NULL,NULL,4.34959999999999968,3600,NULL,NULL);
+INSERT INTO workout_set VALUES(215,19,'Pull Up',1,'normal',NULL,7,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO workout_set VALUES(216,20,'Pull Up',1,'normal',NULL,7,NULL,NULL,NULL,NULL,NULL);
 DELETE FROM sqlite_sequence;
-INSERT INTO sqlite_sequence VALUES('workout',30);
 INSERT INTO sqlite_sequence VALUES('cardio',3);
 INSERT INTO sqlite_sequence VALUES('events',429);
-INSERT INTO sqlite_sequence VALUES('workout_session',18);
-INSERT INTO sqlite_sequence VALUES('workout_set',199);
-CREATE INDEX idx_workout_date       ON workout(date);
-CREATE INDEX idx_workout_exercise   ON workout(exercise);
-CREATE INDEX idx_workout_date_ex    ON workout(date, exercise);
+INSERT INTO sqlite_sequence VALUES('workout_session',20);
+INSERT INTO sqlite_sequence VALUES('workout_set',216);
 CREATE INDEX idx_cardio_date ON cardio(date);
 CREATE INDEX idx_routine_active ON routine(effective_from, effective_to);
 CREATE INDEX idx_events_ts    ON events(ts);

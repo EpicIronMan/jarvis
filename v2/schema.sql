@@ -34,6 +34,9 @@ VALUES (1, '2026-04-11', 'Phase 0 initial schema');
 INSERT OR IGNORE INTO schema_version (version, applied_at, description)
 VALUES (2, '2026-05-03', 'Hevy migration Phase 0: workout_session + workout_set (per-set granularity). Old workout table retained until Phase 3.');
 
+INSERT OR IGNORE INTO schema_version (version, applied_at, description)
+VALUES (3, '2026-05-03', 'Hevy migration Phase 3: handlers cut over, old workout table dropped.');
+
 -- =====================================================================
 -- Body Metrics — one row per day (upsert). Mirrors Body Metrics tab.
 -- Source: Fitbit/Renpho scale sync (primary) or manual Telegram log (fallback).
@@ -94,33 +97,12 @@ CREATE TABLE IF NOT EXISTS nutrition (
 ) STRICT;
 
 -- =====================================================================
--- Workout — strength training log. Multiple rows per day (one per exercise).
--- Source: user via Telegram shorthand, parsed by deterministic router.
--- =====================================================================
-
-CREATE TABLE IF NOT EXISTS workout (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    date          TEXT    NOT NULL,
-    exercise      TEXT    NOT NULL,
-    sets          INTEGER NOT NULL,
-    reps          INTEGER NOT NULL,
-    weight_lbs    REAL    NOT NULL,                    -- 0 OK for bodyweight
-    rpe           REAL,                                  -- nullable; RPE 0–10
-    volume_lbs    REAL,                                  -- stored (not computed) to match sheet
-    session_type  TEXT,                                  -- BRO_SPLIT_LEGS, UPPER, etc.
-    source        TEXT    NOT NULL,                      -- TELEGRAM | MANUAL
-    notes         TEXT
-) STRICT;
-
-CREATE INDEX IF NOT EXISTS idx_workout_date       ON workout(date);
-CREATE INDEX IF NOT EXISTS idx_workout_exercise   ON workout(exercise);
-CREATE INDEX IF NOT EXISTS idx_workout_date_ex    ON workout(date, exercise);
-
--- =====================================================================
--- Workout sessions and sets — Hevy migration Phase 0 (2026-05-03).
--- workout_session = one row per training session (parent, optionally Hevy-sourced).
--- workout_set     = one row per set (child). Hevy gives per-set granularity;
--- this schema preserves it. Old `workout` table stays until Phase 3 cutover.
+-- Workout sessions and sets — per-set granularity (Hevy migration, Phase 3
+-- cutover 2026-05-03 dropped the old per-exercise `workout` table).
+-- workout_session = one row per training session (parent).
+-- workout_set     = one row per set (child, FK to session, ON DELETE CASCADE).
+-- Primary source is Hevy (auto-ingested via webhook); TELEGRAM shorthand
+-- still works for ad-hoc logging via log_workout.
 -- =====================================================================
 
 CREATE TABLE IF NOT EXISTS workout_session (

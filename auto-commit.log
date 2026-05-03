@@ -3100,3 +3100,10 @@ Committed and pushed.
 To github.com:EpicIronMan/jarvis.git
    6da39f1..083296a  master -> master
 Committed and pushed.
+[master e7c699b] auto: snapshot 2026-05-03
+ 8 files changed, 570 insertions(+), 2 deletions(-)
+ create mode 100644 v2/ingest_hevy.py
+ create mode 100644 v2/migrations/001_workout_session_split.py
+To github.com:EpicIronMan/jarvis.git
+   083296a..e7c699b  master -> master
+Committed and pushed.

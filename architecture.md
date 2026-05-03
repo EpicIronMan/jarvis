@@ -54,14 +54,17 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 - **`v2/handlers/log.py`** — Write handlers (INSERT/UPDATE). All writes go through here. Audit events logged automatically.
 - **`v2/handlers/classify.py`** — LLM fallback for router misses. Claude Haiku picks from known intent set. Hallucinated intents rejected.
 - **`v2/handlers/dexa.py`** — DEXA PDF → vision → body_scan table. Narrow LLM scope.
-- **`v2/schema.sql`** — 11 STRICT tables + 3 views. This IS the data layer architecture doc. Workout data uses `workout_session` (parent) + `workout_set` (child) for per-set granularity (Hevy migration Phase 0, 2026-05-03). Old `workout` table retained until Phase 3 handler cutover.
-- **`v2/migrations/`** — one-shot DB migration scripts. `001_workout_session_split.py` backfilled 28 legacy workout rows into 6 sessions / 74 sets on 2026-05-03.
+- **`v2/schema.sql`** — 10 STRICT tables + 3 views. Workout data uses `workout_session` (parent) + `workout_set` (child) for per-set granularity. Old `workout` table dropped 2026-05-03 (Hevy migration Phase 3); read/write handlers cut over to the new tables in the same pass.
+- **`v2/migrations/`** — one-shot DB migration scripts. `001_workout_session_split.py` ran 2026-05-03 to backfill 28 legacy workout rows into 6 sessions / 74 sets.
 - **`v2/lifeos.db`** — SQLite file. Gitignored (binary). Backed up hourly.
 - **`v2/lifeos.sql`** — Text dump for git (diff-friendly history).
 - **`v2/lifeos_cli.py`** — CLI harness for testing queries.
 
 ### Data Pipeline
 - **`v2/ingest_fitbit.py`** — Fitbit API → SQLite. Replaces v1 fitbit_sync.py. Preserves non-null values on partial updates (fixes the overwrite bug). Runs via systemd timer + 10am ET cron re-pull (catches late MFP syncs and Fitbit sleep corrections).
+- **`v2/ingest_hevy.py`** — Hevy API → SQLite (workout_session + workout_set). Idempotent via `hevy_id`. Used both for one-shot historical backfill (no args) and the nightly reconcile cron (`--since=yesterday`).
+- **`v2/hevy_webhook.py`** — aiohttp receiver for Hevy webhooks. Listens on 127.0.0.1:18789, fronted by Caddy at `https://159.203.35.105/hevy-webhook`. Validates `Authorization` header against `HEVY_WEBHOOK_TOKEN`, returns 200 within ms, then async-fetches the workout via `GET /v1/workouts/{id}` and upserts. Runs as `hevy-webhook.service` (systemd, separate from bot).
+- **`v2/hevy_webhook_admin.py`** — CLI to register/inspect/delete the Hevy webhook subscription. Subcommands: `status`, `register`, `delete`. Redacts `auth_token` in output.
 - **`v2/export_to_sheet.py`** — SQLite → Google Sheet (one-way, via gog). Cron every 5 min.
 - **`v2/morning_brief.py`** — Daily 7am ET brief from SQLite. Assembles structured data, calls Claude for prose, sends to Telegram. Reports both hours asleep and time in bed.
 
@@ -91,6 +94,7 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 | 0 * * * * | v2/backup.sh | Hourly SQLite backup |
 
 | 0 9 * * * | v2/triggers.py | Proactive coaching triggers |
+| 30 9 * * * | v2/ingest_hevy.py --since=yesterday | Reconcile any missed Hevy webhooks |
 | 0 10 * * * | v2/ingest_fitbit.py | Re-pull yesterday's Fitbit (catches late MFP syncs) |
 
 Fitbit sync also runs via `fitbit-sync.timer` systemd timer (3x/day → v2/ingest_fitbit.py).

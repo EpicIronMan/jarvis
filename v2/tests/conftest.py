@@ -71,21 +71,34 @@ def _seed(db: sqlite3.Connection):
             (d, cal, prot, "FITBIT"),
         )
 
-    # Workouts — 2 sessions
-    workouts = [
-        ("2026-04-09", "Lat Pulldown", 3, 10, 120.0, None, 3600.0, "BACK", "TELEGRAM"),
-        ("2026-04-09", "Seated Row Machine", 3, 10, 100.0, None, 3000.0, "BACK", "TELEGRAM"),
-        ("2026-04-09", "Pull Ups", 3, 8, 0.0, None, 0.0, "BACK", "TELEGRAM"),
-        ("2026-04-11", "Seated Leg Press", 3, 10, 320.0, None, 9600.0, "LEGS", "TELEGRAM"),
-        ("2026-04-11", "Leg Extension", 3, 12, 90.0, None, 3240.0, "LEGS", "TELEGRAM"),
-        ("2026-04-11", "Bench Press", 3, 8, 185.0, 8.0, 4440.0, "CHEST", "TELEGRAM"),
+    # Workout sessions (parent) + sets (child) — 2 sessions
+    sessions = [
+        # (date, title, source, exercises:[(name, sets, reps, weight, rpe)])
+        ("2026-04-09", "BACK", "TELEGRAM", [
+            ("Lat Pulldown", 3, 10, 120.0, None),
+            ("Seated Row Machine", 3, 10, 100.0, None),
+            ("Pull Ups", 3, 8, None, None),
+        ]),
+        ("2026-04-11", "LEGS", "TELEGRAM", [
+            ("Seated Leg Press", 3, 10, 320.0, None),
+            ("Leg Extension", 3, 12, 90.0, None),
+            ("Bench Press", 3, 8, 185.0, 8.0),
+        ]),
     ]
-    for d, ex, s, r, w, rpe, vol, st, src in workouts:
-        db.execute(
-            "INSERT INTO workout (date, exercise, sets, reps, weight_lbs, rpe, volume_lbs, "
-            "session_type, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (d, ex, s, r, w, rpe, vol, st, src),
+    for d, title, src, exs in sessions:
+        cur = db.execute(
+            "INSERT INTO workout_session (date, title, source) VALUES (?, ?, ?)",
+            (d, title, src),
         )
+        sid = cur.lastrowid
+        for name, n_sets, reps, weight, rpe in exs:
+            for i in range(n_sets):
+                db.execute(
+                    "INSERT INTO workout_set "
+                    "(session_id, exercise, set_index, set_type, weight_lbs, reps, rpe) "
+                    "VALUES (?, ?, ?, 'normal', ?, ?, ?)",
+                    (sid, name, i + 1, weight, reps, rpe),
+                )
 
     # Cardio — 1 session
     db.execute(

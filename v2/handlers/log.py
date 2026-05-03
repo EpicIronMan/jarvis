@@ -76,12 +76,19 @@ def log_workout(
 ) -> dict:
     """Log workout exercises. Each exercise dict: {name, sets, reps, weight_lbs, rpe?}.
 
-    Returns summary with total volume.
+    Creates one workout_session per call and N workout_set rows per exercise
+    (where N = sets). Hevy is the primary source; this path covers Telegram
+    shorthand logging when Hevy isn't being used.
     """
     d = date_str or today()
+    cursor = conn.execute(
+        "INSERT INTO workout_session (date, title, source) VALUES (?, ?, ?)",
+        (d, session_type, source),
+    )
+    session_id = cursor.lastrowid
+
     logged = []
     total_volume = 0
-
     for ex in exercises:
         name = ex["name"]
         sets = int(ex["sets"])
@@ -91,21 +98,26 @@ def log_workout(
         volume = sets * reps * weight
         total_volume += volume
 
-        conn.execute(
-            "INSERT INTO workout (date, exercise, sets, reps, weight_lbs, rpe, volume_lbs, session_type, source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (d, name, sets, reps, weight, rpe, volume, session_type, source),
-        )
-        logged.append({"exercise": name, "sets": sets, "reps": reps, "weight_lbs": weight, "volume": volume})
+        for i in range(sets):
+            conn.execute(
+                "INSERT INTO workout_set "
+                "(session_id, exercise, set_index, set_type, weight_lbs, reps, rpe) "
+                "VALUES (?, ?, ?, 'normal', ?, ?, ?)",
+                (session_id, name, i + 1, weight, reps, rpe),
+            )
+        logged.append({"exercise": name, "sets": sets, "reps": reps,
+                       "weight_lbs": weight, "volume": volume})
 
     _log_event(conn, "handler_call", {
-        "handler": "log_workout", "date": d, "n_exercises": len(exercises),
-        "total_volume": total_volume, "session_type": session_type,
+        "handler": "log_workout", "date": d, "session_id": session_id,
+        "n_exercises": len(exercises), "total_volume": total_volume,
+        "session_type": session_type,
     })
     conn.commit()
     return {
-        "action": "log_workout", "date": d, "exercises": logged,
-        "total_volume": total_volume, "session_type": session_type,
+        "action": "log_workout", "date": d, "session_id": session_id,
+        "exercises": logged, "total_volume": total_volume,
+        "session_type": session_type,
     }
 
 
@@ -229,9 +241,9 @@ def rename_exercise(
     old_name: str,
     new_name: str,
 ) -> dict:
-    """Rename an exercise across all workout rows (case-insensitive match on old_name)."""
+    """Rename an exercise across all workout_set rows (case-insensitive match)."""
     cursor = conn.execute(
-        "UPDATE workout SET exercise = ? WHERE LOWER(exercise) = LOWER(?)",
+        "UPDATE workout_set SET exercise = ? WHERE LOWER(exercise) = LOWER(?)",
         (new_name, old_name),
     )
     count = cursor.rowcount
@@ -266,19 +278,22 @@ def edit_weight(
 
 def delete_workout(
     conn: sqlite3.Connection,
-    workout_id: int,
+    session_id: int,
 ) -> dict:
-    """Delete a specific workout row by ID."""
-    row = conn.execute("SELECT * FROM workout WHERE id = ?", (workout_id,)).fetchone()
+    """Delete a workout session by id (cascades to workout_set rows via FK)."""
+    row = conn.execute(
+        "SELECT id, date, title FROM workout_session WHERE id = ?", (session_id,)
+    ).fetchone()
     if not row:
-        return {"action": "delete_workout", "id": workout_id, "error": "not found"}
-    conn.execute("DELETE FROM workout WHERE id = ?", (workout_id,))
+        return {"action": "delete_workout", "id": session_id, "error": "not found"}
+    conn.execute("DELETE FROM workout_session WHERE id = ?", (session_id,))
     _log_event(conn, "handler_call", {
-        "handler": "delete_workout", "id": workout_id,
-        "exercise": row["exercise"], "date": row["date"],
+        "handler": "delete_workout", "id": session_id,
+        "title": row["title"], "date": row["date"],
     })
     conn.commit()
-    return {"action": "delete_workout", "id": workout_id, "exercise": row["exercise"], "date": row["date"]}
+    return {"action": "delete_workout", "id": session_id,
+            "title": row["title"], "date": row["date"]}
 
 
 def log_recovery(

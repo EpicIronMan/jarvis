@@ -116,85 +116,104 @@ def nutrition_range_summary(conn: sqlite3.Connection, start: str, end: str) -> d
     }
 
 
-# -------- training (workout) --------
+# -------- training (workout_session + workout_set) --------
+#
+# Source of truth is workout_session (parent) + workout_set (child, one row per set).
+# These helpers aggregate per-exercise so the bot's coaching layer keeps the same
+# scalar summary it had under the old workout table (sets/reps/weight_lbs/volume_lbs).
+
+_EXERCISE_SUMMARY_SQL = """
+    SELECT
+        s.date            AS date,
+        ws.exercise       AS exercise,
+        s.title           AS session_type,
+        s.source          AS source,
+        COUNT(*)          AS sets,
+        MAX(ws.reps)      AS reps,
+        MAX(ws.weight_lbs) AS weight_lbs,
+        MAX(ws.rpe)       AS rpe,
+        COALESCE(SUM(COALESCE(ws.weight_lbs, 0) * COALESCE(ws.reps, 0)), 0) AS volume_lbs,
+        MIN(ws.id)        AS first_set_id
+    FROM workout_session s
+    JOIN workout_set ws ON ws.session_id = s.id
+"""
+
+
+def _summarize_exercise_rows(rows) -> list[dict]:
+    out = []
+    for r in rows:
+        d = {k: r[k] for k in r.keys()}
+        d.pop("first_set_id", None)
+        out.append(d)
+    return out
+
 
 def training_on_date(conn: sqlite3.Connection, date_str: str) -> list[dict]:
+    """Per-exercise summaries for a single date."""
     rows = conn.execute(
-        "SELECT * FROM workout WHERE date = ? ORDER BY id", (date_str,)
+        _EXERCISE_SUMMARY_SQL +
+        " WHERE s.date = ? GROUP BY s.id, ws.exercise ORDER BY first_set_id",
+        (date_str,),
     ).fetchall()
-    return _to_list(rows)
+    return _summarize_exercise_rows(rows)
 
 
 def training_range(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    """Return all workout rows in range, grouped summary."""
+    """Per-exercise summaries across a date range, plus session count."""
     rows = conn.execute(
-        "SELECT * FROM workout WHERE date BETWEEN ? AND ? ORDER BY date, id",
+        _EXERCISE_SUMMARY_SQL +
+        " WHERE s.date BETWEEN ? AND ? GROUP BY s.id, ws.exercise "
+        "ORDER BY s.date, first_set_id",
         (start, end),
     ).fetchall()
-    exercises = _to_list(rows)
-    dates = sorted(set(r["date"] for r in exercises)) if exercises else []
+    exercises = _summarize_exercise_rows(rows)
+    session_dates = sorted(set(e["date"] for e in exercises)) if exercises else []
     return {
         "exercises": exercises,
-        "n_sessions": len(dates),
-        "dates": dates,
+        "n_sessions": len(session_dates),
+        "dates": session_dates,
         "n_exercises": len(exercises),
     }
 
 
 def last_training_session(conn: sqlite3.Connection) -> dict:
-    """Return all workout rows from the most recent date any exercise was logged."""
+    """Most recent training date and its per-exercise summaries."""
     row = conn.execute(
-        "SELECT date FROM workout ORDER BY date DESC LIMIT 1"
+        "SELECT date FROM workout_session ORDER BY date DESC LIMIT 1"
     ).fetchone()
     if not row:
         return {"date": None, "exercises": []}
-    date_str = row["date"]
-    return {
-        "date": date_str,
-        "exercises": training_on_date(conn, date_str),
-    }
+    return {"date": row["date"], "exercises": training_on_date(conn, row["date"])}
 
 
 def last_session_of_exercise(conn: sqlite3.Connection, exercise: str) -> dict:
-    """Return the most recent session containing `exercise`.
-
-    Bug #4 fix: tries exact match first (case-insensitive), then falls back
-    to LIKE fuzzy match (e.g. "bench" matches "Bench Press"). Returns the
-    whole session (all exercises from that date) for context.
-    """
-    # Try exact match first
+    """Most recent session containing `exercise`. Exact match first, then fuzzy."""
     row = conn.execute(
-        "SELECT date FROM workout WHERE LOWER(exercise) = LOWER(?) "
-        "ORDER BY date DESC LIMIT 1",
+        "SELECT s.date AS date FROM workout_session s "
+        "JOIN workout_set ws ON ws.session_id = s.id "
+        "WHERE LOWER(ws.exercise) = LOWER(?) "
+        "ORDER BY s.date DESC LIMIT 1",
         (exercise,),
     ).fetchone()
-
-    # Fuzzy fallback: LIKE %exercise%
     if not row:
         row = conn.execute(
-            "SELECT date FROM workout WHERE LOWER(exercise) LIKE '%' || LOWER(?) || '%' "
-            "ORDER BY date DESC LIMIT 1",
+            "SELECT s.date AS date FROM workout_session s "
+            "JOIN workout_set ws ON ws.session_id = s.id "
+            "WHERE LOWER(ws.exercise) LIKE '%' || LOWER(?) || '%' "
+            "ORDER BY s.date DESC LIMIT 1",
             (exercise,),
         ).fetchone()
-
     if not row:
         return {"date": None, "exercises": [], "matched_exercise": None}
 
     date_str = row["date"]
     all_exercises = training_on_date(conn, date_str)
-
-    # Find the actual exercise name that matched
     matched = exercise
     for ex in all_exercises:
         if exercise.lower() in ex.get("exercise", "").lower():
             matched = ex["exercise"]
             break
-
-    return {
-        "date": date_str,
-        "exercises": all_exercises,
-        "matched_exercise": matched,
-    }
+    return {"date": date_str, "exercises": all_exercises, "matched_exercise": matched}
 
 
 # -------- cardio --------

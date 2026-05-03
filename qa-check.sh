@@ -68,6 +68,13 @@ if ! systemctl is-active --quiet fitbit-sync.timer 2>/dev/null; then
 fi
 
 # ============================================================
+# 3b. Hevy webhook receiver active (workout source of truth)
+# ============================================================
+if ! systemctl is-active --quiet hevy-webhook 2>/dev/null; then
+    flag "hevy_webhook_down" "hevy-webhook service is not active — Hevy workouts won't ingest"
+fi
+
+# ============================================================
 # 4. Today's conversation log exists (after 9am)
 # ============================================================
 HOUR=$(TZ="America/Toronto" date +%H)

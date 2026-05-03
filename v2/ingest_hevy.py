@@ -55,6 +55,26 @@ def hevy_get(path: str, key: str) -> dict:
         return json.loads(r.read())
 
 
+def hevy_post(path: str, key: str, body: dict) -> dict:
+    """POST to the Hevy API. Used for webhook subscription management."""
+    req = urllib.request.Request(
+        f"{API_BASE}{path}",
+        data=json.dumps(body).encode(),
+        headers={"api-key": key, "accept": "application/json",
+                 "content-type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        raw = r.read()
+        return json.loads(raw) if raw else {}
+
+
+def fetch_workout(hevy_id: str, key: str) -> dict:
+    """Fetch a single workout by its Hevy id. Used by webhook handler."""
+    data = hevy_get(f"/workouts/{hevy_id}", key)
+    return data.get("workout", data)
+
+
 def iso_to_et_date(iso_ts: str) -> str:
     """Convert an ISO timestamp to YYYY-MM-DD in America/Toronto."""
     if not iso_ts:
