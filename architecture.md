@@ -1,6 +1,6 @@
 # J.A.R.V.I.S. — Architecture Document (v2)
 
-Last updated: 2026-04-13
+Last updated: 2026-05-03
 
 ## Maintenance Rule
 
@@ -54,7 +54,8 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 - **`v2/handlers/log.py`** — Write handlers (INSERT/UPDATE). All writes go through here. Audit events logged automatically.
 - **`v2/handlers/classify.py`** — LLM fallback for router misses. Claude Haiku picks from known intent set. Hallucinated intents rejected.
 - **`v2/handlers/dexa.py`** — DEXA PDF → vision → body_scan table. Narrow LLM scope.
-- **`v2/schema.sql`** — 9 STRICT tables + 3 views. This IS the data layer architecture doc.
+- **`v2/schema.sql`** — 11 STRICT tables + 3 views. This IS the data layer architecture doc. Workout data uses `workout_session` (parent) + `workout_set` (child) for per-set granularity (Hevy migration Phase 0, 2026-05-03). Old `workout` table retained until Phase 3 handler cutover.
+- **`v2/migrations/`** — one-shot DB migration scripts. `001_workout_session_split.py` backfilled 28 legacy workout rows into 6 sessions / 74 sets on 2026-05-03.
 - **`v2/lifeos.db`** — SQLite file. Gitignored (binary). Backed up hourly.
 - **`v2/lifeos.sql`** — Text dump for git (diff-friendly history).
 - **`v2/lifeos_cli.py`** — CLI harness for testing queries.

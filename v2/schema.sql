@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version (version, applied_at, description)
 VALUES (1, '2026-04-11', 'Phase 0 initial schema');
 
+INSERT OR IGNORE INTO schema_version (version, applied_at, description)
+VALUES (2, '2026-05-03', 'Hevy migration Phase 0: workout_session + workout_set (per-set granularity). Old workout table retained until Phase 3.');
+
 -- =====================================================================
 -- Body Metrics — one row per day (upsert). Mirrors Body Metrics tab.
 -- Source: Fitbit/Renpho scale sync (primary) or manual Telegram log (fallback).
@@ -112,6 +115,46 @@ CREATE TABLE IF NOT EXISTS workout (
 CREATE INDEX IF NOT EXISTS idx_workout_date       ON workout(date);
 CREATE INDEX IF NOT EXISTS idx_workout_exercise   ON workout(exercise);
 CREATE INDEX IF NOT EXISTS idx_workout_date_ex    ON workout(date, exercise);
+
+-- =====================================================================
+-- Workout sessions and sets — Hevy migration Phase 0 (2026-05-03).
+-- workout_session = one row per training session (parent, optionally Hevy-sourced).
+-- workout_set     = one row per set (child). Hevy gives per-set granularity;
+-- this schema preserves it. Old `workout` table stays until Phase 3 cutover.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS workout_session (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    hevy_id         TEXT    UNIQUE,                      -- nullable; populated for HEVY source
+    date            TEXT    NOT NULL,                    -- YYYY-MM-DD (ET-derived from started_at)
+    started_at      TEXT,                                -- ISO8601 with tz; nullable
+    ended_at        TEXT,                                -- ISO8601 with tz; nullable
+    title           TEXT,                                -- session name, e.g. "Leg Day"
+    notes           TEXT,
+    source          TEXT    NOT NULL,                    -- HEVY | TELEGRAM | MANUAL | BACKFILL
+    raw_payload     TEXT                                 -- original Hevy payload JSON (audit)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_workout_session_date    ON workout_session(date);
+CREATE INDEX IF NOT EXISTS idx_workout_session_hevy_id ON workout_session(hevy_id);
+
+CREATE TABLE IF NOT EXISTS workout_set (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      INTEGER NOT NULL REFERENCES workout_session(id) ON DELETE CASCADE,
+    exercise        TEXT    NOT NULL,
+    set_index       INTEGER NOT NULL,                    -- 1-based within (session, exercise)
+    set_type        TEXT,                                -- normal | warmup | failure | drop_set
+    weight_lbs      REAL,                                -- nullable (bodyweight, distance-only)
+    reps            INTEGER,                             -- nullable
+    rpe             REAL,                                -- nullable
+    distance_miles  REAL,                                -- nullable
+    duration_sec    INTEGER,                             -- nullable
+    superset_id     TEXT,                                -- nullable; pairs exercises
+    notes           TEXT
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_workout_set_session  ON workout_set(session_id);
+CREATE INDEX IF NOT EXISTS idx_workout_set_exercise ON workout_set(exercise);
 
 -- =====================================================================
 -- Cardio — cardio sessions. Multiple rows per day possible.
