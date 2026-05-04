@@ -110,11 +110,18 @@ if [ "$WEIGHT_COUNT" = "0" ]; then
 fi
 
 # ============================================================
-# 8. Recovery data freshness (< 2 days old)
+# 8. Recovery data freshness (< 2 days old, with actual values not just NULL row)
 # ============================================================
 REC_COUNT=$(sqlite3 "$DB" "SELECT COUNT(*) FROM recovery WHERE date >= '$YESTERDAY'" 2>/dev/null || echo 0)
 if [ "$REC_COUNT" = "0" ]; then
-    flag "stale_recovery" "No recovery data in last 2 days — Fitbit sync may be failing"
+    flag "stale_recovery" "No recovery rows in last 2 days — Fitbit sync may be failing"
+fi
+# Catch the case where a row exists but values are all NULL (device not reporting,
+# Fitbit API returns empty, our code writes a row with NULLs preserved). This was
+# silent for 12 days starting 2026-04-22 — added 2026-05-03.
+NULL_REC_DAYS=$(sqlite3 "$DB" "SELECT COUNT(*) FROM recovery WHERE date >= date('$TODAY','-3 days') AND sleep_hours IS NULL AND steps IS NULL" 2>/dev/null || echo 0)
+if [ "$NULL_REC_DAYS" -ge 3 ]; then
+    flag "recovery_all_null" "Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing"
 fi
 
 # ============================================================

@@ -62,7 +62,7 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 
 ### Data Pipeline
 - **`v2/ingest_fitbit.py`** — Fitbit API → SQLite. Replaces v1 fitbit_sync.py. Preserves non-null values on partial updates (fixes the overwrite bug). Runs via systemd timer + 10am ET cron re-pull (catches late MFP syncs and Fitbit sleep corrections).
-- **`v2/ingest_hevy.py`** — Hevy API → SQLite (workout_session + workout_set). Idempotent via `hevy_id`. Used both for one-shot historical backfill (no args) and the nightly reconcile cron (`--since=yesterday`).
+- **`v2/ingest_hevy.py`** — Hevy API → SQLite (workout_session + workout_set). Idempotent via `hevy_id`. Used for: one-shot historical backfill (no args), nightly reconcile cron (`--since=7d --prune`), and the webhook handler (via `fetch_workout` + `upsert_workout` imports). `--prune` deletes any HEVY-source session whose hevy_id is no longer in Hevy's full workout list (since Hevy's webhook only fires on creation, not deletion). A safety guard skips prune if the API returns an empty list while DB has rows.
 - **`v2/hevy_webhook.py`** — aiohttp receiver for Hevy webhooks. Listens on 127.0.0.1:18789, fronted by Caddy at `https://159.203.35.105/hevy-webhook`. Validates `Authorization` header against `HEVY_WEBHOOK_TOKEN`, returns 200 within ms, then async-fetches the workout via `GET /v1/workouts/{id}` and upserts. Runs as `hevy-webhook.service` (systemd, separate from bot).
 - **`v2/hevy_webhook_admin.py`** — CLI to register/inspect/delete the Hevy webhook subscription. Subcommands: `status`, `register`, `delete`. Redacts `auth_token` in output.
 - **`v2/export_to_sheet.py`** — SQLite → Google Sheet (one-way, via gog). Cron every 5 min.
@@ -94,7 +94,7 @@ v2/router.py (regex intent matcher, ~35 patterns, 16+ intents)
 | 0 * * * * | v2/backup.sh | Hourly SQLite backup |
 
 | 0 9 * * * | v2/triggers.py | Proactive coaching triggers |
-| 30 9 * * * | v2/ingest_hevy.py --since=yesterday | Reconcile any missed Hevy webhooks |
+| 30 9 * * * | v2/ingest_hevy.py --since=7d --prune | Reconcile missed webhooks + delete sessions removed in Hevy |
 | 0 10 * * * | v2/ingest_fitbit.py | Re-pull yesterday's Fitbit (catches late MFP syncs) |
 
 Fitbit sync also runs via `fitbit-sync.timer` systemd timer (3x/day → v2/ingest_fitbit.py).

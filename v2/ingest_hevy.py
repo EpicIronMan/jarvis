@@ -137,10 +137,47 @@ def upsert_workout(con: sqlite3.Connection, w: dict) -> tuple[bool, int]:
     return created, set_count
 
 
+def fetch_all_hevy_ids(key: str, page_size: int = 10) -> set[str]:
+    """Return the set of every workout id Hevy currently has for this account."""
+    ids: set[str] = set()
+    page = 1
+    while True:
+        data = hevy_get(f"/workouts?page={page}&pageSize={page_size}", key)
+        workouts = data.get("workouts", [])
+        if not workouts:
+            break
+        for w in workouts:
+            ids.add(w["id"])
+        if page >= data.get("page_count", 1):
+            break
+        page += 1
+    return ids
+
+
+def prune_deleted(con: sqlite3.Connection, live_ids: set[str]) -> list[str]:
+    """Delete any HEVY-source workout_session whose hevy_id is no longer in Hevy.
+
+    Cascades to workout_set rows via FK ON DELETE CASCADE.
+    Returns the list of hevy_ids that were pruned.
+    """
+    rows = con.execute(
+        "SELECT id, hevy_id FROM workout_session "
+        "WHERE source = 'HEVY' AND hevy_id IS NOT NULL"
+    ).fetchall()
+    pruned = []
+    for sid, hid in rows:
+        if hid not in live_ids:
+            con.execute("DELETE FROM workout_session WHERE id = ?", (sid,))
+            pruned.append(hid)
+    return pruned
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", help="Only ingest workouts on/after this YYYY-MM-DD (ET)")
     ap.add_argument("--page-size", type=int, default=10, help="API page size (max 10)")
+    ap.add_argument("--prune", action="store_true",
+                    help="After ingest, delete DB sessions whose hevy_id is no longer in Hevy")
     args = ap.parse_args()
 
     key = read_api_key()
@@ -180,6 +217,26 @@ def main():
         page += 1
 
     con.commit()
+
+    if args.prune:
+        live_ids = fetch_all_hevy_ids(key, args.page_size)
+        db_hevy_count = con.execute(
+            "SELECT COUNT(*) FROM workout_session WHERE source='HEVY' AND hevy_id IS NOT NULL"
+        ).fetchone()[0]
+        # Safety: if Hevy returns an empty list while DB has rows, treat as API
+        # hiccup and skip pruning rather than nuke history.
+        if not live_ids and db_hevy_count > 0:
+            log.warning(
+                f"prune: Hevy returned 0 workouts but DB has {db_hevy_count} HEVY sessions — "
+                "skipping prune to avoid data loss from a transient API failure"
+            )
+        else:
+            pruned = prune_deleted(con, live_ids)
+            con.commit()
+            if pruned:
+                log.info(f"pruned {len(pruned)} sessions deleted from Hevy: {pruned}")
+            else:
+                log.info("prune: nothing to delete (DB and Hevy are in sync)")
 
     s = con.execute("SELECT COUNT(*) FROM workout_session WHERE source='HEVY'").fetchone()[0]
     t = con.execute(
