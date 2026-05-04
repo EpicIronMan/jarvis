@@ -99,3 +99,4 @@
 {"date":"2026-05-03","key":"recovery_all_null","msg":"Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing"}
 {"date":"2026-05-03","key":"root_owned_files","msg":"Root-owned files found: /home/openclaw/lifeos/qa-check.sh"}
 {"date":"2026-05-03","key":"git_remote_unreachable","msg":"Cannot reach git remote — backup is not updating"}
+{"date":"2026-05-04","key":"recovery_all_null","msg":"Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing"}
