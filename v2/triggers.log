@@ -120,3 +120,9 @@
 2026-05-04 09:00:02,107 INFO Trigger fired: Weight up +1.7 lbs this week (174.2 → 175.9) while goal is 150.0 lbs. Review nutrition?
 2026-05-04 09:00:02,832 INFO Sent 2 trigger alert(s)
 2026-05-04 09:00:02,832 INFO Sent 2 trigger alert(s)
+2026-05-05 09:00:01,778 INFO Trigger fired: Protein averaging 50g/day over last 2 days (target: 154g from 129 lbs lean mass).
+2026-05-05 09:00:01,778 INFO Trigger fired: Protein averaging 50g/day over last 2 days (target: 154g from 129 lbs lean mass).
+2026-05-05 09:00:01,781 INFO Trigger fired: Weight up +1.5 lbs this week (173.5 → 175.0) while goal is 150.0 lbs. Review nutrition?
+2026-05-05 09:00:01,781 INFO Trigger fired: Weight up +1.5 lbs this week (173.5 → 175.0) while goal is 150.0 lbs. Review nutrition?
+2026-05-05 09:00:02,518 INFO Sent 2 trigger alert(s)
+2026-05-05 09:00:02,518 INFO Sent 2 trigger alert(s)
