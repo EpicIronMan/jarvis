@@ -800,3 +800,43 @@
 2026-05-09 10:00:09,147 INFO Token refreshed successfully.
 2026-05-09 10:00:09,486 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-05-09', 'calories': 108.0, 'protein_g': 3.0}
 2026-05-09 10:00:09,486 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-05-10 10:00:02,695 INFO === Fitbit sync (v2/SQLite) starting for 2026-05-09 ===
+2026-05-10 10:00:02,695 INFO Pulling body metrics for 2026-05-09
+2026-05-10 10:00:03,220 INFO Refreshing access token...
+2026-05-10 10:00:03,552 INFO Token refreshed successfully.
+2026-05-10 10:00:04,099 INFO Body metrics written: {'action': 'log_weight', 'date': '2026-05-09', 'weight_lbs': 177.5, 'weight_kg': 80.5, 'bmi': 27.37}
+2026-05-10 10:00:04,099 INFO Pulling sleep data for 2026-05-09
+2026-05-10 10:00:04,210 INFO Refreshing access token...
+2026-05-10 10:00:04,507 INFO Token refreshed successfully.
+2026-05-10 10:00:05,121 INFO No sleep data for 2026-05-09
+2026-05-10 10:00:05,121 INFO Pulling activity data for 2026-05-09
+2026-05-10 10:00:05,222 INFO Refreshing access token...
+2026-05-10 10:00:05,455 INFO Token refreshed successfully.
+2026-05-10 10:00:06,133 INFO Refreshing access token...
+2026-05-10 10:00:06,316 INFO Token refreshed successfully.
+2026-05-10 10:00:08,496 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-05-09', 'source': 'FITBIT'}
+2026-05-10 10:00:08,496 INFO Pulling nutrition data for 2026-05-09
+2026-05-10 10:00:08,601 INFO Refreshing access token...
+2026-05-10 10:00:08,777 INFO Token refreshed successfully.
+2026-05-10 10:00:09,135 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-05-09', 'calories': 1712.0, 'protein_g': 119.0}
+2026-05-10 10:00:09,135 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-05-10 10:00:09,136 INFO === Fitbit sync (v2/SQLite) starting for 2026-05-10 ===
+2026-05-10 10:00:09,136 INFO Pulling body metrics for 2026-05-10
+2026-05-10 10:00:09,239 INFO Refreshing access token...
+2026-05-10 10:00:09,415 INFO Token refreshed successfully.
+2026-05-10 10:00:09,731 INFO Body metrics written: {'action': 'log_weight', 'date': '2026-05-10', 'weight_lbs': 175.9, 'weight_kg': 79.8, 'bmi': 27.12}
+2026-05-10 10:00:09,732 INFO Pulling sleep data for 2026-05-10
+2026-05-10 10:00:09,829 INFO Refreshing access token...
+2026-05-10 10:00:10,011 INFO Token refreshed successfully.
+2026-05-10 10:00:10,295 INFO No sleep data for 2026-05-10
+2026-05-10 10:00:10,295 INFO Pulling activity data for 2026-05-10
+2026-05-10 10:00:10,408 INFO Refreshing access token...
+2026-05-10 10:00:10,588 INFO Token refreshed successfully.
+2026-05-10 10:00:11,159 INFO Refreshing access token...
+2026-05-10 10:00:11,379 INFO Token refreshed successfully.
+2026-05-10 10:00:12,978 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-05-10', 'source': 'FITBIT'}
+2026-05-10 10:00:12,978 INFO Pulling nutrition data for 2026-05-10
+2026-05-10 10:00:13,082 INFO Refreshing access token...
+2026-05-10 10:00:13,280 INFO Token refreshed successfully.
+2026-05-10 10:00:14,033 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-05-10', 'calories': 770.0, 'protein_g': 27.0}
+2026-05-10 10:00:14,034 INFO === Fitbit sync (v2/SQLite) complete ===
