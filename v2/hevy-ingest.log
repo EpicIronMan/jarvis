@@ -34,3 +34,7 @@
 2026-05-12 09:30:03,250 INFO prune: nothing to delete (DB and Hevy are in sync)
 2026-05-12 09:30:03,251 INFO Hevy ingest done: processed 2 workouts (0 new, 2 updated), 14 sets
 2026-05-12 09:30:03,251 INFO Total HEVY sessions in DB: 15, total HEVY sets: 148
+2026-05-13 09:30:02,383 INFO page 1/2: 10 workouts processed
+2026-05-13 09:30:02,692 INFO prune: nothing to delete (DB and Hevy are in sync)
+2026-05-13 09:30:02,692 INFO Hevy ingest done: processed 1 workouts (0 new, 1 updated), 8 sets
+2026-05-13 09:30:02,692 INFO Total HEVY sessions in DB: 15, total HEVY sets: 148
