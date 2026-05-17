@@ -1040,3 +1040,42 @@
 2026-05-16 10:00:12,553 INFO Pulling nutrition data for 2026-05-16
 2026-05-16 10:00:12,876 INFO No nutrition data for 2026-05-16
 2026-05-16 10:00:12,876 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-05-17 10:00:03,065 INFO === Fitbit sync (v2/SQLite) starting for 2026-05-16 ===
+2026-05-17 10:00:03,068 INFO Pulling body metrics for 2026-05-16
+2026-05-17 10:00:03,553 INFO Refreshing access token...
+2026-05-17 10:00:03,873 INFO Token refreshed successfully.
+2026-05-17 10:00:04,194 INFO No weight data for 2026-05-16
+2026-05-17 10:00:04,194 INFO Pulling sleep data for 2026-05-16
+2026-05-17 10:00:04,305 INFO Refreshing access token...
+2026-05-17 10:00:04,463 INFO Token refreshed successfully.
+2026-05-17 10:00:04,927 INFO No sleep data for 2026-05-16
+2026-05-17 10:00:04,928 INFO Pulling activity data for 2026-05-16
+2026-05-17 10:00:05,028 INFO Refreshing access token...
+2026-05-17 10:00:05,182 INFO Token refreshed successfully.
+2026-05-17 10:00:09,679 INFO Refreshing access token...
+2026-05-17 10:00:09,838 INFO Token refreshed successfully.
+2026-05-17 10:00:10,309 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-05-16', 'source': 'FITBIT'}
+2026-05-17 10:00:10,310 INFO Pulling nutrition data for 2026-05-16
+2026-05-17 10:00:10,441 INFO Refreshing access token...
+2026-05-17 10:00:10,591 INFO Token refreshed successfully.
+2026-05-17 10:00:10,862 INFO No nutrition data for 2026-05-16
+2026-05-17 10:00:10,863 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-05-17 10:00:10,863 INFO === Fitbit sync (v2/SQLite) starting for 2026-05-17 ===
+2026-05-17 10:00:10,863 INFO Pulling body metrics for 2026-05-17
+2026-05-17 10:00:10,965 INFO Refreshing access token...
+2026-05-17 10:00:11,135 INFO Token refreshed successfully.
+2026-05-17 10:00:11,418 INFO No weight data for 2026-05-17
+2026-05-17 10:00:11,418 INFO Pulling sleep data for 2026-05-17
+2026-05-17 10:00:11,517 INFO Refreshing access token...
+2026-05-17 10:00:12,212 INFO Token refreshed successfully.
+2026-05-17 10:00:12,505 INFO No sleep data for 2026-05-17
+2026-05-17 10:00:12,505 INFO Pulling activity data for 2026-05-17
+2026-05-17 10:00:12,611 INFO Refreshing access token...
+2026-05-17 10:00:12,893 INFO Token refreshed successfully.
+2026-05-17 10:00:13,404 INFO Refreshing access token...
+2026-05-17 10:00:13,557 INFO Token refreshed successfully.
+2026-05-17 10:00:14,214 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-05-17', 'source': 'FITBIT'}
+2026-05-17 10:00:14,215 INFO Pulling nutrition data for 2026-05-17
+2026-05-17 10:00:14,311 INFO Refreshing access token...
+2026-05-17 10:00:24,449 ERROR Nutrition pull failed: HTTP Error 504: Gateway Timeout
+2026-05-17 10:00:24,450 INFO === Fitbit sync (v2/SQLite) complete ===
