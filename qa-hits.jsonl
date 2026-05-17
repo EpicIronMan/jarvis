@@ -123,3 +123,6 @@
 {"date":"2026-05-15","key":"recovery_all_null","msg":"Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing"}
 {"date":"2026-05-16","key":"no_training_2026-05-15","msg":"No training logged for 2026-05-15"}
 {"date":"2026-05-16","key":"recovery_all_null","msg":"Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing"}
+{"date":"2026-05-17","key":"no_training_2026-05-16","msg":"No training logged for 2026-05-16"}
+{"date":"2026-05-17","key":"no_nutrition_2026-05-16","msg":"No nutrition logged for 2026-05-16"}
+{"date":"2026-05-17","key":"recovery_all_null","msg":"Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing"}
