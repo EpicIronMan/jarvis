@@ -1258,3 +1258,48 @@
 2026-05-22 10:00:08,839 INFO Token refreshed successfully.
 2026-05-22 10:00:09,087 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-05-22', 'calories': 1036.0, 'protein_g': 85.0}
 2026-05-22 10:00:09,087 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-05-23 10:00:02,686 INFO === Fitbit sync (v2/SQLite) starting for 2026-05-22 ===
+2026-05-23 10:00:02,688 INFO Pulling body metrics for 2026-05-22
+2026-05-23 10:00:03,266 ERROR Fitbit API error 500: /1/user/-/body/log/weight/date/2026-05-22.json — {
+  "success": false,
+  "errors": [{
+    "errorType": "request",
+    "message": "\u003ceye3 title\u003d\u0027/FitbitUberMinter.MintFromExternalAuthenticator, INTERNAL\u0027/\u003e APPLICATION_ERROR;ubermint.service/FitbitUberMinter.MintFromExternalAuthenticator;Request \u0027/FitbitUberMinter.MintFromExternalAuthenticator\u0027 from role \u0027fitbit-api-server\u0027 throttled: Service is overloaded (fairness-task-load) go/tr-o.;AppErrorCode\u003d3;StartTimeMs\u003d1779544803172;unknown;ResFormat\u003duncompressed;ServerTimeSec\u003d0.016265328;LogBytes\u003d256;FailFast;EffSecLevel\u003dnone;ReqFormat\u003duncompressed;ReqID\u003dd8a99ade06214bc0;GlobalID\u003d0;Server\u003d[2002:a05:6f01:240e::]:4234"
+  }]
+}
+2026-05-23 10:00:03,267 ERROR Body metrics pull failed: HTTP Error 500: Internal Server Error
+2026-05-23 10:00:03,268 INFO Pulling sleep data for 2026-05-22
+2026-05-23 10:00:03,394 INFO Refreshing access token...
+2026-05-23 10:00:03,712 INFO Token refreshed successfully.
+2026-05-23 10:00:04,459 INFO No sleep data for 2026-05-22
+2026-05-23 10:00:04,460 INFO Pulling activity data for 2026-05-22
+2026-05-23 10:00:04,564 INFO Refreshing access token...
+2026-05-23 10:00:04,699 INFO Token refreshed successfully.
+2026-05-23 10:00:06,237 INFO Refreshing access token...
+2026-05-23 10:00:06,407 INFO Token refreshed successfully.
+2026-05-23 10:00:06,794 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-05-22', 'source': 'FITBIT'}
+2026-05-23 10:00:06,794 INFO Pulling nutrition data for 2026-05-22
+2026-05-23 10:00:06,962 INFO Refreshing access token...
+2026-05-23 10:00:07,199 INFO Token refreshed successfully.
+2026-05-23 10:00:07,474 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-05-22', 'calories': 1320.0, 'protein_g': 116.0}
+2026-05-23 10:00:07,474 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-05-23 10:00:07,474 INFO === Fitbit sync (v2/SQLite) starting for 2026-05-23 ===
+2026-05-23 10:00:07,474 INFO Pulling body metrics for 2026-05-23
+2026-05-23 10:00:07,586 INFO Refreshing access token...
+2026-05-23 10:00:07,739 INFO Token refreshed successfully.
+2026-05-23 10:00:07,973 INFO No weight data for 2026-05-23
+2026-05-23 10:00:07,974 INFO Pulling sleep data for 2026-05-23
+2026-05-23 10:00:08,110 INFO Refreshing access token...
+2026-05-23 10:00:08,483 INFO Token refreshed successfully.
+2026-05-23 10:00:08,772 INFO No sleep data for 2026-05-23
+2026-05-23 10:00:08,773 INFO Pulling activity data for 2026-05-23
+2026-05-23 10:00:08,879 INFO Refreshing access token...
+2026-05-23 10:00:09,018 INFO Token refreshed successfully.
+2026-05-23 10:00:09,975 INFO Refreshing access token...
+2026-05-23 10:00:10,164 INFO Token refreshed successfully.
+2026-05-23 10:00:10,540 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-05-23', 'source': 'FITBIT'}
+2026-05-23 10:00:10,540 INFO Pulling nutrition data for 2026-05-23
+2026-05-23 10:00:10,662 INFO Refreshing access token...
+2026-05-23 10:00:10,794 INFO Token refreshed successfully.
+2026-05-23 10:00:11,062 INFO No nutrition data for 2026-05-23
+2026-05-23 10:00:11,062 INFO === Fitbit sync (v2/SQLite) complete ===
