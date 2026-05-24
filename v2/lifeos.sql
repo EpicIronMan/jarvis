@@ -81,7 +81,7 @@ INSERT INTO body_metrics VALUES('2026-05-13',176.599999999999994,80.099999999999
 INSERT INTO body_metrics VALUES('2026-05-15',174.400000000000005,79.0999999999999943,21.6000000000000014,NULL,NULL,26.8900000000000005,'FITBIT','synced 16:00 ET');
 INSERT INTO body_metrics VALUES('2026-05-21',179.199999999999988,81.2999999999999971,22.8000000000000007,NULL,NULL,27.629999999999999,'FITBIT','synced 16:00 ET');
 INSERT INTO body_metrics VALUES('2026-05-22',181.0,82.0999999999999943,23.1000000000000014,NULL,NULL,27.9100000000000001,'FITBIT','synced 16:00 ET');
-INSERT INTO body_metrics VALUES('2026-05-23',180.099999999999994,81.7000000000000028,23.0,NULL,NULL,27.7699999999999995,'FITBIT','synced 02:00 ET');
+INSERT INTO body_metrics VALUES('2026-05-23',180.099999999999994,81.7000000000000028,23.0,NULL,NULL,27.7699999999999995,'FITBIT','synced 10:00 ET');
 CREATE TABLE body_scan (
     date                        TEXT    PRIMARY KEY,  -- YYYY-MM-DD
     scan_type                   TEXT    NOT NULL,     -- DEXA | InBody | other
@@ -185,7 +185,7 @@ INSERT INTO nutrition VALUES('2026-05-19',916.0,49.0,66.0,49.0,1.0,890.0,'FITBIT
 INSERT INTO nutrition VALUES('2026-05-20',750.0,21.0,136.0,16.0,10.0,830.0,'FITBIT','synced 16:00 ET');
 INSERT INTO nutrition VALUES('2026-05-21',720.0,18.0,115.0,24.0,7.0,960.0,'FITBIT','synced 16:00 ET');
 INSERT INTO nutrition VALUES('2026-05-22',1320.0,116.0,134.0,35.0,9.0,2431.0,'FITBIT','synced 16:00 ET');
-INSERT INTO nutrition VALUES('2026-05-23',344.0,8.0,43.0,15.0,3.0,325.0,'FITBIT','synced 02:00 ET');
+INSERT INTO nutrition VALUES('2026-05-23',344.0,8.0,43.0,15.0,3.0,325.0,'FITBIT','synced 10:00 ET');
 CREATE TABLE cardio (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     date           TEXT    NOT NULL,
@@ -293,8 +293,8 @@ INSERT INTO recovery VALUES('2026-05-19',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL
 INSERT INTO recovery VALUES('2026-05-20',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
 INSERT INTO recovery VALUES('2026-05-21',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
 INSERT INTO recovery VALUES('2026-05-22',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
-INSERT INTO recovery VALUES('2026-05-23',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 02:00 ET');
-INSERT INTO recovery VALUES('2026-05-24',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 02:00 ET');
+INSERT INTO recovery VALUES('2026-05-23',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 10:00 ET');
+INSERT INTO recovery VALUES('2026-05-24',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 10:00 ET');
 CREATE TABLE routine (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     effective_from  TEXT    NOT NULL,                    -- YYYY-MM-DD
@@ -1115,6 +1115,10 @@ INSERT INTO events VALUES(788,'2026-05-24T02:00:04.288577-04:00','handler_call',
 INSERT INTO events VALUES(789,'2026-05-24T02:00:10.779560-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-23", "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(790,'2026-05-24T02:00:11.840993-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-05-23", "calories": 344.0, "protein_g": 8.0}',NULL);
 INSERT INTO events VALUES(791,'2026-05-24T02:00:14.242343-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-24", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(792,'2026-05-24T10:00:02.754124-04:00','handler_call','{"handler": "log_weight", "date": "2026-05-23", "weight_lbs": 180.1, "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(793,'2026-05-24T10:00:04.160876-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-23", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(794,'2026-05-24T10:00:04.429319-04:00','handler_call','{"handler": "log_nutrition", "date": "2026-05-23", "calories": 344.0, "protein_g": 8.0}',NULL);
+INSERT INTO events VALUES(795,'2026-05-24T10:00:05.882525-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-24", "source": "FITBIT"}',NULL);
 CREATE TABLE workout_session (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     hevy_id         TEXT    UNIQUE,                      -- nullable; populated for HEVY source
@@ -1392,7 +1396,7 @@ INSERT INTO workout_set VALUES(461,24,'Seated Row (Machine)',2,'normal',85.0,10,
 INSERT INTO workout_set VALUES(462,24,'Seated Row (Machine)',3,'normal',85.0,10,NULL,NULL,NULL,NULL,NULL);
 DELETE FROM sqlite_sequence;
 INSERT INTO sqlite_sequence VALUES('cardio',3);
-INSERT INTO sqlite_sequence VALUES('events',791);
+INSERT INTO sqlite_sequence VALUES('events',795);
 INSERT INTO sqlite_sequence VALUES('workout_session',24);
 INSERT INTO sqlite_sequence VALUES('workout_set',462);
 CREATE INDEX idx_cardio_date ON cardio(date);
