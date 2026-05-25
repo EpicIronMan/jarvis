@@ -230,3 +230,9 @@
 2026-05-24 09:00:01,721 INFO Trigger fired: Protein averaging 62g/day over last 2 days (target: 154g from 129 lbs lean mass).
 2026-05-24 09:00:02,606 INFO Sent 2 trigger alert(s)
 2026-05-24 09:00:02,606 INFO Sent 2 trigger alert(s)
+2026-05-25 09:00:01,922 INFO Trigger fired: No training logged in 11 days (last: 2026-05-14). Rest day or missed log?
+2026-05-25 09:00:01,922 INFO Trigger fired: No training logged in 11 days (last: 2026-05-14). Rest day or missed log?
+2026-05-25 09:00:01,927 INFO Trigger fired: Protein averaging 9g/day over last 2 days (target: 154g from 129 lbs lean mass).
+2026-05-25 09:00:01,927 INFO Trigger fired: Protein averaging 9g/day over last 2 days (target: 154g from 129 lbs lean mass).
+2026-05-25 09:00:02,886 INFO Sent 2 trigger alert(s)
+2026-05-25 09:00:02,886 INFO Sent 2 trigger alert(s)
