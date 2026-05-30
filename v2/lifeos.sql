@@ -305,8 +305,8 @@ INSERT INTO recovery VALUES('2026-05-25',NULL,NULL,NULL,35,NULL,NULL,NULL,NULL,'
 INSERT INTO recovery VALUES('2026-05-26',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
 INSERT INTO recovery VALUES('2026-05-27',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
 INSERT INTO recovery VALUES('2026-05-28',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
-INSERT INTO recovery VALUES('2026-05-29',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 11:00 ET');
-INSERT INTO recovery VALUES('2026-05-30',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 11:00 ET');
+INSERT INTO recovery VALUES('2026-05-29',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
+INSERT INTO recovery VALUES('2026-05-30',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'FITBIT','synced 16:00 ET');
 CREATE TABLE routine (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     effective_from  TEXT    NOT NULL,                    -- YYYY-MM-DD
@@ -1217,6 +1217,8 @@ INSERT INTO events VALUES(878,'2026-05-30T10:00:04.936370-04:00','handler_call',
 INSERT INTO events VALUES(879,'2026-05-30T10:00:07.438606-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-30", "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(880,'2026-05-30T11:00:04.189384-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-29", "source": "FITBIT"}',NULL);
 INSERT INTO events VALUES(881,'2026-05-30T11:00:05.867702-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-30", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(882,'2026-05-30T16:00:04.086823-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-29", "source": "FITBIT"}',NULL);
+INSERT INTO events VALUES(883,'2026-05-30T16:00:06.308648-04:00','handler_call','{"handler": "log_recovery", "date": "2026-05-30", "source": "FITBIT"}',NULL);
 CREATE TABLE workout_session (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     hevy_id         TEXT    UNIQUE,                      -- nullable; populated for HEVY source
@@ -1499,7 +1501,7 @@ INSERT INTO workout_set VALUES(485,25,'Lat Pulldown (Cable)',3,'normal',160.0,8,
 INSERT INTO workout_set VALUES(486,25,'Treadmill',1,'normal',NULL,NULL,NULL,0.0,2220,NULL,NULL);
 DELETE FROM sqlite_sequence;
 INSERT INTO sqlite_sequence VALUES('cardio',3);
-INSERT INTO sqlite_sequence VALUES('events',881);
+INSERT INTO sqlite_sequence VALUES('events',883);
 INSERT INTO sqlite_sequence VALUES('workout_session',25);
 INSERT INTO sqlite_sequence VALUES('workout_set',486);
 CREATE INDEX idx_cardio_date ON cardio(date);
