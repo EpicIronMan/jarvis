@@ -104,3 +104,8 @@ QA Check (2026-05-27) — 2 issue(s):
 QA Check (2026-05-28) — 2 issue(s):
 - No training logged for 2026-05-27
 - Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing
+QA Check (2026-05-31) — 4 issue(s):
+- No training logged for 2026-05-30
+- No nutrition logged for 2026-05-30
+- No weight logged in the last 3 days
+- Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing
