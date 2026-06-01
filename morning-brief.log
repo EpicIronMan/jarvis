@@ -201,3 +201,7 @@ Morning brief sent (822 chars)
 2026-05-31 07:00:15,190 INFO HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
 2026-05-31 07:00:15,740 INFO Morning brief sent
 2026-05-31 07:00:15,740 INFO Morning brief sent
+2026-06-01 07:00:17,469 INFO HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-06-01 07:00:17,469 INFO HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-06-01 07:00:18,033 INFO Morning brief sent
+2026-06-01 07:00:18,033 INFO Morning brief sent
