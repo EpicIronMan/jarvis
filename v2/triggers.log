@@ -292,3 +292,7 @@
 2026-06-05 09:00:03,056 INFO Trigger fired: No training logged in 11 days (last: 2026-05-25). Rest day or missed log?
 2026-06-05 09:00:03,960 INFO Sent 1 trigger alert(s)
 2026-06-05 09:00:03,960 INFO Sent 1 trigger alert(s)
+2026-06-06 09:00:01,952 INFO Trigger fired: No training logged in 12 days (last: 2026-05-25). Rest day or missed log?
+2026-06-06 09:00:01,952 INFO Trigger fired: No training logged in 12 days (last: 2026-05-25). Rest day or missed log?
+2026-06-06 09:00:02,836 INFO Sent 1 trigger alert(s)
+2026-06-06 09:00:02,836 INFO Sent 1 trigger alert(s)
