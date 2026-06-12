@@ -191,3 +191,6 @@
 {"date":"2026-06-11","key":"no_nutrition_2026-06-10","msg":"No nutrition logged for 2026-06-10"}
 {"date":"2026-06-11","key":"no_weight_3d","msg":"No weight logged in the last 3 days"}
 {"date":"2026-06-11","key":"recovery_all_null","msg":"Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing"}
+{"date":"2026-06-12","key":"no_training_2026-06-11","msg":"No training logged for 2026-06-11"}
+{"date":"2026-06-12","key":"no_weight_3d","msg":"No weight logged in the last 3 days"}
+{"date":"2026-06-12","key":"recovery_all_null","msg":"Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing"}
