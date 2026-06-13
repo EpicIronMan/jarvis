@@ -137,3 +137,7 @@ QA Check (2026-06-09) — 3 issue(s):
 - No training logged for 2026-06-08
 - No weight logged in the last 3 days
 - Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing
+QA Check (2026-06-13) — 3 issue(s):
+- No training logged for 2026-06-12
+- No weight logged in the last 3 days
+- Recovery rows exist but sleep_hours+steps are NULL for 3+ recent days — Fitbit device may be offline / not syncing
