@@ -2065,3 +2065,43 @@
 2026-06-14 10:00:07,396 INFO Token refreshed successfully.
 2026-06-14 10:00:07,641 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-06-14', 'calories': 290.0, 'protein_g': 11.0}
 2026-06-14 10:00:07,642 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-06-15 10:00:02,763 INFO === Fitbit sync (v2/SQLite) starting for 2026-06-14 ===
+2026-06-15 10:00:02,764 INFO Pulling body metrics for 2026-06-14
+2026-06-15 10:00:03,680 INFO Refreshing access token...
+2026-06-15 10:00:03,938 INFO Token refreshed successfully.
+2026-06-15 10:00:04,233 INFO No weight data for 2026-06-14
+2026-06-15 10:00:04,233 INFO Pulling sleep data for 2026-06-14
+2026-06-15 10:00:04,337 INFO Refreshing access token...
+2026-06-15 10:00:04,544 INFO Token refreshed successfully.
+2026-06-15 10:00:05,062 INFO No sleep data for 2026-06-14
+2026-06-15 10:00:05,062 INFO Pulling activity data for 2026-06-14
+2026-06-15 10:00:05,162 INFO Refreshing access token...
+2026-06-15 10:00:05,319 INFO Token refreshed successfully.
+2026-06-15 10:00:05,885 INFO Refreshing access token...
+2026-06-15 10:00:06,021 INFO Token refreshed successfully.
+2026-06-15 10:00:06,343 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-06-14', 'source': 'FITBIT'}
+2026-06-15 10:00:06,344 INFO Pulling nutrition data for 2026-06-14
+2026-06-15 10:00:06,446 INFO Refreshing access token...
+2026-06-15 10:00:06,569 INFO Token refreshed successfully.
+2026-06-15 10:00:06,857 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-06-14', 'calories': 408.0, 'protein_g': 12.0}
+2026-06-15 10:00:06,857 INFO === Fitbit sync (v2/SQLite) complete ===
+2026-06-15 10:00:06,857 INFO === Fitbit sync (v2/SQLite) starting for 2026-06-15 ===
+2026-06-15 10:00:06,858 INFO Pulling body metrics for 2026-06-15
+2026-06-15 10:00:06,932 INFO Refreshing access token...
+2026-06-15 10:00:07,071 INFO Token refreshed successfully.
+2026-06-15 10:00:07,268 INFO No weight data for 2026-06-15
+2026-06-15 10:00:07,269 INFO Pulling sleep data for 2026-06-15
+2026-06-15 10:00:07,347 INFO Refreshing access token...
+2026-06-15 10:00:07,479 INFO Token refreshed successfully.
+2026-06-15 10:00:07,771 INFO No sleep data for 2026-06-15
+2026-06-15 10:00:07,772 INFO Pulling activity data for 2026-06-15
+2026-06-15 10:00:07,968 INFO Refreshing access token...
+2026-06-15 10:00:08,119 INFO Token refreshed successfully.
+2026-06-15 10:00:08,583 INFO Refreshing access token...
+2026-06-15 10:00:08,708 INFO Token refreshed successfully.
+2026-06-15 10:00:09,091 INFO Recovery written: {'action': 'log_recovery', 'date': '2026-06-15', 'source': 'FITBIT'}
+2026-06-15 10:00:09,092 INFO Pulling nutrition data for 2026-06-15
+2026-06-15 10:00:09,180 INFO Refreshing access token...
+2026-06-15 10:00:09,297 INFO Token refreshed successfully.
+2026-06-15 10:00:09,495 INFO Nutrition written: {'action': 'log_nutrition', 'date': '2026-06-15', 'calories': 190.0, 'protein_g': 21.0}
+2026-06-15 10:00:09,495 INFO === Fitbit sync (v2/SQLite) complete ===
